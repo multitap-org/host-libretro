@@ -26,6 +26,7 @@
 #include "core_session.h"
 #include "host_fs.h"
 #include "libretro_host.h"
+#include "host_libretro_version.h"
 #include "picture.h"
 #include "settings_file.h"
 #include "vk_texture.h"
@@ -704,6 +705,7 @@ static void draw_controls_window(App* app)
     ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(460.0f, 760.0f), ImGuiCond_FirstUseEver);
     ImGui::Begin("host-libretro");
+    ImGui::TextDisabled("host-libretro %s", HOST_LIBRETRO_VERSION);
 
     draw_core_list(app);
     ImGui::InputTextWithHint("Content", "empty = start without content", app->content_path, sizeof(app->content_path));
@@ -1161,6 +1163,8 @@ static void handle_events(App* app)
 
 int main(int argc, char** argv)
 {
+    SDL_Log("libretro_test_frontend, host-libretro %s", HOST_LIBRETRO_VERSION);
+
     // App holds a LibretroHost pointer and path buffers; keep it off the stack.
     App* app = new App{};
     if (!core_session_create(&app->session))

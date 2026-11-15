@@ -14,6 +14,15 @@ add_library(host_libretro STATIC
 )
 
 target_include_directories(host_libretro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# host-libretro's version (docs/roadmap-host-libretro.md): host_libretro_version.h,
+# HOST_LIBRETRO_VERSION. Lives in the multitap repository, so the branch suffix
+# is multitap's branch.
+set(HOST_LIBRETRO_VERSION_BASE 0.3)
+multitap_version(HOST_LIBRETRO_VERSION ${HOST_LIBRETRO_VERSION_BASE} "${CMAKE_CURRENT_SOURCE_DIR}")
+multitap_write_version_header("${CMAKE_CURRENT_BINARY_DIR}/generated" host_libretro HOST_LIBRETRO_VERSION "${HOST_LIBRETRO_VERSION}")
+target_include_directories(host_libretro PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/generated")
+message(STATUS "host-libretro ${HOST_LIBRETRO_VERSION}")
 target_link_libraries(host_libretro PUBLIC host_common libretro_api)
 
 multitap_set_project_flags(host_libretro)

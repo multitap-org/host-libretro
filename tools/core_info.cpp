@@ -15,6 +15,7 @@
 #include <cstring>
 #include <string>
 
+#include "host_libretro_version.h"
 #include "host_log.h"
 #include "libretro_host.h"
 
@@ -181,6 +182,7 @@ int main(int argc, char** argv)
         print_usage();
         return 2;
     }
+    host_log(LogLevel::info, "host-libretro %s", HOST_LIBRETRO_VERSION);
 
     if (peek_only)
     {
