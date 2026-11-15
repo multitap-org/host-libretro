@@ -31,8 +31,10 @@ constexpr size_t LIBRETRO_PATH_MAX = 4096;
 
 constexpr unsigned LIBRETRO_MAX_PORTS = 4;
 
-// Savestate slots 0..LIBRETRO_STATE_SLOTS-1, one file each.
-constexpr uint32_t LIBRETRO_STATE_SLOTS = 10;
+// Savestate slots 1..9, one file each (<game>.state1 .. .state9; decided by
+// Andrés for the quick menu: no slot 0). Old .state0 files are left alone.
+constexpr uint32_t LIBRETRO_STATE_SLOT_FIRST = 1;
+constexpr uint32_t LIBRETRO_STATE_SLOT_LAST  = 9;
 
 // RETRO_DEVICE_KEYBOARD key states are indexed by RETROK_* code.
 constexpr unsigned LIBRETRO_KEY_COUNT = RETROK_LAST;

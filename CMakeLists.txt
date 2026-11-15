@@ -249,6 +249,13 @@ if(MULTITAP_BUILD_TESTS)
             PASS_REGULAR_EXPRESSION "state loaded: frame 50, page Environment.*Savestate: loaded slot 3"
             FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|REJECTED")
 
+        # Slots are 1..9: slot 0 is refused.
+        add_test(NAME host_libretro_state_no_slot_0
+                 COMMAND libretro_core_info --data-dir "${STATE_DIR}" --frames 2 --save-state 0 $<TARGET_FILE:test_libretro>)
+        set_tests_properties(host_libretro_state_no_slot_0 PROPERTIES
+            FIXTURES_REQUIRED state_clean
+            PASS_REGULAR_EXPRESSION "Savestate: no slot 0")
+
         add_test(NAME host_libretro_state_empty_slot
                  COMMAND libretro_core_info --data-dir "${STATE_DIR}" --load-state 7 $<TARGET_FILE:test_libretro>)
         set_tests_properties(host_libretro_state_empty_slot PROPERTIES
