@@ -206,6 +206,22 @@ static int16_t pointer_state(const LibretroInputState* input, unsigned port, uns
     }
 }
 
+static bool RETRO_CALLCONV set_rumble_state_callback(unsigned port, enum retro_rumble_effect effect, uint16_t strength)
+{
+    LibretroHost* host = g_current_host;
+    if (host == nullptr || port >= LIBRETRO_MAX_PORTS || (effect != RETRO_RUMBLE_STRONG && effect != RETRO_RUMBLE_WEAK))
+    {
+        return false;
+    }
+    host->rumble[port][effect == RETRO_RUMBLE_STRONG ? 0 : 1] = strength;
+    return true;
+}
+
+retro_set_rumble_state_t libretro_host_rumble_callback()
+{
+    return set_rumble_state_callback;
+}
+
 static int16_t RETRO_CALLCONV input_state_callback(unsigned port, unsigned device, unsigned index, unsigned id)
 {
     LibretroHost* host = g_current_host;
@@ -321,6 +337,31 @@ static void* memory_region(LibretroHost* host, unsigned id, size_t* size)
 }
 
 // Right after retro_load_game: the memory pointers are valid from then on.
+// retro_set_controller_port_device for one port, with the device the
+// frontend chose (libretro's default when it chose none: the joypad).
+static void set_port_device(LibretroHost* host, unsigned port)
+{
+    unsigned device = host->port_devices[port];
+    host_enter(host);
+    host->core.retro_set_controller_port_device(port, device);
+    host_leave(host);
+    const char* name = libretro_input_controller_name(&host->input_info, port, device);
+    host_log(LogLevel::info, "Port %u: device %u (%s)", port, device, name != nullptr ? name : "not listed by the core");
+}
+
+// After the game loads: the ports the core described, and any other the
+// frontend plugged something other than the joypad into.
+static void apply_port_devices(LibretroHost* host)
+{
+    for (unsigned port = 0; port < LIBRETRO_MAX_PORTS; port++)
+    {
+        if (port < host->input_info.port_count || host->port_devices[port] != RETRO_DEVICE_JOYPAD)
+        {
+            set_port_device(host, port);
+        }
+    }
+}
+
 static void load_memory_regions(LibretroHost* host)
 {
     for (size_t i = 0; i < MEMORY_REGION_COUNT; i++)
@@ -805,6 +846,7 @@ bool libretro_host_load_game(LibretroHost* host, const char* content_path)
     host_leave(host);
 
     load_memory_regions(host);
+    apply_port_devices(host);
 
     const retro_game_geometry* geometry = &host->av_info.geometry;
     host_log(LogLevel::info, "Video: base %ux%u, max %ux%u, aspect %.4f, %.4f fps",
@@ -853,6 +895,21 @@ void libretro_host_unload_game(LibretroHost* host)
 // ---------------------------------------------------------------------------
 // Running
 // ---------------------------------------------------------------------------
+
+bool libretro_host_set_port_device(LibretroHost* host, unsigned port, unsigned device)
+{
+    if (port >= LIBRETRO_MAX_PORTS)
+    {
+        host_log(LogLevel::warning, "Port %u: no such port (%u ports)", port, LIBRETRO_MAX_PORTS);
+        return false;
+    }
+    host->port_devices[port] = device;
+    if (host->game_loaded)
+    {
+        set_port_device(host, port);
+    }
+    return true;
+}
 
 void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input)
 {

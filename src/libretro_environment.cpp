@@ -445,10 +445,74 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
-        // --- Informational: accepted, stored later when a feature needs it --
+        // --- Input -----------------------------------------------------------
+
+        case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            uint32_t described = libretro_input_store_controllers(&host->input_info,
+                                                                  static_cast<const retro_controller_info*>(data));
+            uint32_t types = 0;
+            for (uint32_t p = 0; p < host->input_info.port_count; p++)
+            {
+                types += host->input_info.ports[p].count;
+            }
+            std::snprintf(note, note_size, "%u port(s), %u device type(s)%s", described, types,
+                          described > LIBRETRO_MAX_PORTS ? ", ports past 4 dropped" : "");
+            return EnvironmentResult::handled;
+        }
 
         case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
-        case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            uint32_t sent = libretro_input_store_descriptors(&host->input_info,
+                                                             static_cast<const retro_input_descriptor*>(data));
+            std::snprintf(note, note_size, "%u control(s)%s", sent,
+                          sent > LIBRETRO_INPUT_DESCRIPTORS_MAX ? ", some dropped" : "");
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            *static_cast<uint64_t*>(data) = LIBRETRO_INPUT_DEVICE_CAPABILITIES;
+            std::snprintf(note, note_size, "joypad, analog, pointer, keyboard");
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            *static_cast<unsigned*>(data) = LIBRETRO_MAX_PORTS;
+            std::snprintf(note, note_size, "%u", LIBRETRO_MAX_PORTS);
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            static_cast<retro_rumble_interface*>(data)->set_rumble_state = libretro_host_rumble_callback();
+            std::snprintf(note, note_size, "strong and weak, per port");
+            return EnvironmentResult::handled;
+        }
+
+        // --- Informational: accepted, stored later when a feature needs it --
+
         case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
         case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS:
         case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS:

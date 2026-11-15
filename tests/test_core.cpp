@@ -5,7 +5,12 @@
 //     SET_SUPPORT_NO_GAME, SET_VARIABLES) like many cores do,
 //   - asks for directories and a pixel format in retro_init,
 //   - accepts content from memory and checks it arrived intact,
-//   - reports a 320x240 @ 60 fps, 48 kHz AV info.
+//   - reports a 320x240 @ 60 fps, 48 kHz AV info,
+//   - declares its input like a console core: two ports (a joypad and a
+//     six-button pad, a subclass), input descriptors that change with the
+//     port's device, rumble; retro_run reports what GET_INPUT_MAX_USERS and
+//     GET_INPUT_DEVICE_CAPABILITIES answered through port 0's rumble (strong =
+//     max users, weak = the low 16 bits of the capabilities), so a test can see it.
 //
 // Build variants (CMake):
 //   test_core                 the normal core
@@ -16,6 +21,7 @@
 // pointer), so this file uses file-local statics on purpose.
 
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
@@ -23,6 +29,37 @@
 
 static retro_environment_t g_environment = nullptr;
 static retro_log_printf_t  g_log         = nullptr;
+
+// Input (see the header comment).
+constexpr unsigned TEST_CORE_DEVICE_SIX_BUTTON = RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0);
+static retro_set_rumble_state_t g_rumble       = nullptr;
+static unsigned                 g_max_users    = 0;
+static uint64_t                 g_capabilities = 0;
+static unsigned                 g_port0_device = RETRO_DEVICE_JOYPAD;
+
+// The controls port 0 has with its current device (three for the joypad,
+// five for the six-button pad), plus one on port 1.
+static void send_input_descriptors()
+{
+    static const retro_input_descriptor joypad[] = {
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "Jump" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y, "Run" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Pause" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "Player 2 Jump" },
+        { 0, 0, 0, 0, nullptr },
+    };
+    static const retro_input_descriptor six_button[] = {
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "Low Kick" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A, "Mid Kick" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y, "Low Punch" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X, "Mid Punch" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Pause" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "Player 2 Jump" },
+        { 0, 0, 0, 0, nullptr },
+    };
+    const retro_input_descriptor* list = g_port0_device == TEST_CORE_DEVICE_SIX_BUTTON ? six_button : joypad;
+    g_environment(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, const_cast<retro_input_descriptor*>(list));
+}
 
 static void core_log(retro_log_level level, const char* format, ...)
 {
@@ -62,6 +99,20 @@ void retro_set_environment(retro_environment_t callback)
         { nullptr, nullptr },
     };
     g_environment(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(variables));
+
+    static const retro_controller_description port0_types[] = {
+        { "Test Joypad", RETRO_DEVICE_JOYPAD },
+        { "Test Six Button Pad", TEST_CORE_DEVICE_SIX_BUTTON },
+    };
+    static const retro_controller_description port1_types[] = {
+        { "Test Joypad", RETRO_DEVICE_JOYPAD },
+    };
+    static const retro_controller_info controllers[] = {
+        { port0_types, 2 },
+        { port1_types, 1 },
+        { nullptr, 0 },
+    };
+    g_environment(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, const_cast<retro_controller_info*>(controllers));
 }
 
 void retro_set_video_refresh(retro_video_refresh_t callback)            { (void)callback; }
@@ -109,6 +160,14 @@ void retro_init(void)
         core_log(RETRO_LOG_INFO, "no value for test_core_speed, using default\n");
     }
 
+    retro_rumble_interface rumble = {};
+    if (g_environment(RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE, &rumble))
+    {
+        g_rumble = rumble.set_rumble_state;
+    }
+    g_environment(RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS, &g_max_users);
+    g_environment(RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES, &g_capabilities);
+
     // A command number nobody defines: must come back "not handled".
     g_environment(9999, nullptr);
 
@@ -136,6 +195,8 @@ void retro_deinit(void)
 
 bool retro_load_game(const retro_game_info* game)
 {
+    g_port0_device = RETRO_DEVICE_JOYPAD;
+    send_input_descriptors();
     if (game == nullptr)
     {
         core_log(RETRO_LOG_INFO, "started without content\n");
@@ -195,8 +256,12 @@ void retro_get_system_av_info(retro_system_av_info* info)
 
 void retro_set_controller_port_device(unsigned port, unsigned device)
 {
-    (void)port;
-    (void)device;
+    core_log(RETRO_LOG_INFO, "port %u device %u\n", port, device);
+    if (port == 0)
+    {
+        g_port0_device = device;
+        send_input_descriptors();
+    }
 }
 
 void retro_reset(void)
@@ -206,6 +271,11 @@ void retro_reset(void)
 #if !defined(TEST_CORE_OMIT_RUN)
 void retro_run(void)
 {
+    if (g_rumble != nullptr)
+    {
+        g_rumble(0, RETRO_RUMBLE_STRONG, static_cast<uint16_t>(g_max_users));
+        g_rumble(0, RETRO_RUMBLE_WEAK, static_cast<uint16_t>(g_capabilities & 0xFFFFu));
+    }
 }
 #endif
 

@@ -10,6 +10,7 @@ add_library(host_libretro STATIC
     src/libretro_video.cpp
     src/libretro_audio.cpp
     src/libretro_options.cpp
+    src/libretro_input.cpp
 )
 
 target_include_directories(host_libretro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -136,6 +137,16 @@ if(MULTITAP_BUILD_TESTS)
     target_link_libraries(host_libretro_options_test PRIVATE host_libretro)
     multitap_set_project_flags(host_libretro_options_test)
     add_test(NAME host_libretro_options COMMAND host_libretro_options_test)
+
+    # Input: controller info and descriptors kept as data, port devices,
+    # rumble, max users and device capabilities (with the test core).
+    add_executable(host_libretro_input_test tests/input_test.cpp)
+    target_link_libraries(host_libretro_input_test PRIVATE host_libretro)
+    multitap_set_project_flags(host_libretro_input_test)
+    add_test(NAME host_libretro_input COMMAND host_libretro_input_test $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_input PROPERTIES
+        PASS_REGULAR_EXPRESSION "input: all checks passed"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
     # Our test core declares its option with SET_VARIABLES: keeps the oldest format covered end to end.
     add_test(NAME host_libretro_options_v0_test_core

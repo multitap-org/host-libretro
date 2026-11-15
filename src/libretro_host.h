@@ -24,12 +24,11 @@
 #include "libretro.h"
 #include "libretro_audio.h"
 #include "libretro_core.h"
+#include "libretro_input.h"
 #include "libretro_options.h"
 #include "libretro_video.h"
 
 constexpr size_t LIBRETRO_PATH_MAX = 4096;
-
-constexpr unsigned LIBRETRO_MAX_PORTS = 4;
 
 // Savestate slots 1..9, one file each (<game>.state1 .. .state9; decided by
 // Andrés for the quick menu: no slot 0). Old .state0 files are left alone.
@@ -92,6 +91,12 @@ struct LibretroHostStats
     uint64_t audio_errors        = 0;   // audio callbacks whose samples we couldn't store (no memory)
     uint64_t input_polls         = 0;
 };
+
+// What GET_INPUT_DEVICE_CAPABILITIES answers: the devices LibretroInputState
+// carries (mouse and lightgun: later).
+constexpr uint64_t LIBRETRO_INPUT_DEVICE_CAPABILITIES =
+    (1ull << RETRO_DEVICE_JOYPAD) | (1ull << RETRO_DEVICE_ANALOG) | (1ull << RETRO_DEVICE_POINTER) |
+    (1ull << RETRO_DEVICE_KEYBOARD);
 
 // Directories we hand to the core. Empty string = "not defined".
 struct LibretroHostConfig
@@ -168,6 +173,16 @@ struct LibretroHost
     uint32_t        language = 0;               // copied from the config at load (GET_LANGUAGE)
     bool            native_pixel_formats = false;   // copied from the config at load (libretro_video.h)
 
+    // What the core said about its input (libretro_input.h), and the device the
+    // frontend plugged into each port (libretro_host_set_port_device).
+    LibretroInputInfo input_info = {};
+    unsigned          port_devices[LIBRETRO_MAX_PORTS] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
+                                                          RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD};
+
+    // Rumble the core asked for (GET_RUMBLE_INTERFACE), per port: strong and
+    // weak motor, 0..0xffff. The frontend plays it on the port's controller.
+    uint16_t rumble[LIBRETRO_MAX_PORTS][2] = {};
+
     // Set by the core with SET_KEYBOARD_CALLBACK; nullptr = it doesn't want key events.
     retro_keyboard_event_t keyboard_callback = nullptr;
 
@@ -191,6 +206,13 @@ bool libretro_host_load_game(LibretroHost* host, const char* content_path);
 
 // Replaces the input the core will see on its next input_state calls.
 void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input);
+
+// Plugs `device` (RETRO_DEVICE_JOYPAD, or a type the core listed in
+// input_info for that port) into `port`. Kept, and passed to the core with
+// retro_set_controller_port_device now if a game is loaded, else right after
+// the game loads. The core may send new input descriptors in reply. False
+// for a port past LIBRETRO_MAX_PORTS.
+bool libretro_host_set_port_device(LibretroHost* host, unsigned port, unsigned device);
 
 // Tells the core whether the frontend is fast-forwarding (GET_FASTFORWARDING).
 // The frontend runs the extra frames itself; this is only what the core is told
@@ -254,6 +276,10 @@ bool libretro_core_short_name(const char* core_path, char* out, size_t out_size)
 // the core's list (case-insensitive; an empty list accepts anything), or, for
 // no content (nullptr or ""), if the core supports running without content.
 bool libretro_core_info_accepts(const LibretroCoreInfo* info, const char* content_path);
+
+// The rumble callback handed to cores (GET_RUMBLE_INTERFACE); it writes
+// into the current host's `rumble`. For libretro_environment.cpp.
+retro_set_rumble_state_t libretro_host_rumble_callback();
 
 // The instance the core is currently running in, or nullptr outside core calls.
 LibretroHost* libretro_host_current();
