@@ -89,7 +89,8 @@ static void RETRO_CALLCONV video_refresh_callback(const void* data, unsigned wid
         return;
     }
 
-    if (!libretro_video_store_frame(&host->video, data, width, height, pitch, host->pixel_format))
+    if (!libretro_video_store_frame(&host->video, data, width, height, pitch, host->pixel_format,
+                                    host->native_pixel_formats))
     {
         if (host->stats.video_errors == 0)
         {
@@ -513,6 +514,8 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
     host->core_options_version = config->core_options_version <= LIBRETRO_CORE_OPTIONS_VERSION_MAX
                                      ? config->core_options_version : LIBRETRO_CORE_OPTIONS_VERSION_MAX;
     host->language = config->language;
+    host->native_pixel_formats = config->native_pixel_formats;
+    host->fast_forwarding = false;
     // Also before set_environment: that's where cores declare their options.
     if (!libretro_options_set_saved(&host->options, config->saved_options, config->saved_option_count))
     {

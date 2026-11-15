@@ -633,9 +633,10 @@ static void benchmark_update(App* app)
     double core_fps = app->session.host->av_info.timing.fps;
     double fps = frames / elapsed;
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "Benchmark: %s %ux%u, %.1f s, timing %s, %s: %.1f core fps (x%.2f), %.1f us per core frame, "
+                "Benchmark: %s (%s) %ux%u, %.1f s, timing %s, %s: %.1f core fps (x%.2f), %.1f us per core frame, "
                 "%.1f us per upload (%.0f uploads)",
-                pixel_format_name(app->session.host->pixel_format), app->session.host->video.width,
+                pixel_format_name(app->session.host->pixel_format),
+                app->session.host->native_pixel_formats ? "native" : "converted", app->session.host->video.width,
                 app->session.host->video.height, elapsed, frame_timing_mode_name(app->session.timing.effective),
                 vk_present_mode_to_string(app->shell.swapchain.present_mode), fps,
                 core_fps > 0.0 ? fps / core_fps : 0.0, frames > 0.0 ? run_ns / frames / 1e3 : 0.0,
@@ -771,7 +772,8 @@ static void draw_controls_window(App* app)
 
         ImGui::Text("Core: %s %s", system->library_name != nullptr ? system->library_name : "?",
                     system->library_version != nullptr ? system->library_version : "");
-        ImGui::Text("Pixel format: %s", pixel_format_name(host->pixel_format));
+        ImGui::Text("Pixel format: %s (%s)", pixel_format_name(host->pixel_format),
+                    host->native_pixel_formats ? "uploaded as is" : "converted to XRGB8888");
         ImGui::Text("Geometry: base %ux%u, max %ux%u, aspect %.3f", geometry->base_width, geometry->base_height,
                     geometry->max_width, geometry->max_height, static_cast<double>(geometry->aspect_ratio));
         ImGui::Text("Timing: %.3f fps, %.0f Hz audio", host->av_info.timing.fps, host->av_info.timing.sample_rate);

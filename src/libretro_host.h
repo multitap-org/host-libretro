@@ -115,6 +115,11 @@ struct LibretroHostConfig
     // language, so cores can show their own text in it).
     uint32_t language = 0;   // RETRO_LANGUAGE_ENGLISH
 
+    // Video frames in the core's own pixel format (rows copied as they are)
+    // instead of converted to XRGB8888 (libretro_video.h). For frontends that
+    // upload each format to a matching GPU texture; others leave it off.
+    bool native_pixel_formats = false;
+
     // Core option values the frontend kept for this core and game (its
     // options file): each applied when the core declares that option, before
     // it reads it (libretro_options_set_saved). Copied at load.
@@ -161,6 +166,7 @@ struct LibretroHost
     LibretroOptions options              = {};
     uint32_t        core_options_version = 2;   // copied from the config at load
     uint32_t        language = 0;               // copied from the config at load (GET_LANGUAGE)
+    bool            native_pixel_formats = false;   // copied from the config at load (libretro_video.h)
 
     // Set by the core with SET_KEYBOARD_CALLBACK; nullptr = it doesn't want key events.
     retro_keyboard_event_t keyboard_callback = nullptr;
