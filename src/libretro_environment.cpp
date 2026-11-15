@@ -290,7 +290,7 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             {
                 return null_data(note, note_size);
             }
-            *static_cast<bool*>(data) = false;
+            *static_cast<bool*>(data) = host->fast_forwarding;
             return EnvironmentResult::handled;
         }
 

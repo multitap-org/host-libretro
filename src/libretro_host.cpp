@@ -856,6 +856,11 @@ void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input
     host->input = *input;
 }
 
+void libretro_host_set_fast_forward(LibretroHost* host, bool fast_forwarding)
+{
+    host->fast_forwarding = fast_forwarding;
+}
+
 bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycode, uint32_t character, uint16_t modifiers)
 {
     if (host->keyboard_callback == nullptr || !host->core_initialized)

@@ -169,6 +169,7 @@ struct LibretroHost
     retro_pixel_format pixel_format       = RETRO_PIXEL_FORMAT_0RGB1555;   // libretro's default
     bool               supports_no_game   = false;
     bool               shutdown_requested = false;
+    bool               fast_forwarding    = false;   // what GET_FASTFORWARDING answers (libretro_host_set_fast_forward)
     bool               peeking            = false;   // libretro_host_peek_core: environment calls logged at debug level only
     unsigned           performance_level  = 0;
 
@@ -184,6 +185,11 @@ bool libretro_host_load_game(LibretroHost* host, const char* content_path);
 
 // Replaces the input the core will see on its next input_state calls.
 void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input);
+
+// Tells the core whether the frontend is fast-forwarding (GET_FASTFORWARDING).
+// The frontend runs the extra frames itself; this is only what the core is told
+// (some cores skip work while fast-forwarding).
+void libretro_host_set_fast_forward(LibretroHost* host, bool fast_forwarding);
 
 // Writes the core's save RAM (and RTC, if any) to the data directory now.
 // Also done automatically when the game is unloaded; call this too every so

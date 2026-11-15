@@ -63,6 +63,21 @@ struct PictureControls
     float max_offscreen = 5.0f;
 };
 
+// --benchmark SECONDS: start the core from the command line fast-forwarding,
+// measure for SECONDS after a warm-up, log the result and quit. Compares
+// builds (e.g. the video path) on the same core and content.
+constexpr uint64_t BENCHMARK_WARMUP_NS = 3000000000;   // 3 s: pipelines, caches, the CPU clock settling
+
+struct Benchmark
+{
+    double           seconds    = 0.0;   // 0 = no benchmark
+    uint64_t         started_ns = 0;     // first loop with the core running (0 = not yet)
+    bool             measuring  = false;
+    uint64_t         measure_ns = 0;     // when measuring started
+    CoreSessionStats at_start   = {};    // the session's stats then
+    bool             failed     = false; // the core didn't start or stopped: exit code 1
+};
+
 struct App
 {
     AppShell shell = {};
@@ -93,6 +108,8 @@ struct App
     // base size or aspect changes (load, SET_GEOMETRY, SET_SYSTEM_AV_INFO), the
     // window is resized once; the user may resize it freely in between.
     retro_game_geometry video_window_geometry = {};
+
+    Benchmark benchmark = {};
 };
 
 // ---------------------------------------------------------------------------
@@ -546,6 +563,84 @@ static void draw_timing_section(App* app)
                     : app->session.timing.effective == TimingMode::vsync ? " (matched to the display + DRC)"
                                                                          : " (DRC)");
     }
+
+    ImGui::Checkbox("Fast forward", &app->session.fast_forward);
+    ImGui::SetItemTooltip("Runs as many core frames as fit in %.0f%% of each frame, muted. Hold Space for the same.",
+                          CORE_SESSION_FAST_FORWARD_BUDGET * 100.0);
+    const CoreSessionStats* stats = &app->session.stats;
+    if (stats->frames > 0 && stats->uploads > 0)
+    {
+        ImGui::Text("Per core frame %.3f ms (core + storing the picture), per upload %.1f us",
+                    static_cast<double>(stats->run_ns) / static_cast<double>(stats->frames) / 1e6,
+                    static_cast<double>(stats->upload_ns) / static_cast<double>(stats->uploads) / 1e3);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Benchmark (--benchmark SECONDS)
+// ---------------------------------------------------------------------------
+
+static void benchmark_update(App* app)
+{
+    Benchmark* benchmark = &app->benchmark;
+    if (benchmark->seconds <= 0.0)
+    {
+        return;
+    }
+    if (!core_running(app))
+    {
+        if (benchmark->started_ns != 0)
+        {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Benchmark: the core stopped");
+        }
+        else
+        {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Benchmark: the core didn't start");
+        }
+        benchmark->failed = true;
+        app->running = false;
+        return;
+    }
+    app->session.fast_forward = true;
+
+    uint64_t now = SDL_GetTicksNS();
+    if (benchmark->started_ns == 0)
+    {
+        benchmark->started_ns = now;
+        return;
+    }
+    if (!benchmark->measuring)
+    {
+        if (now - benchmark->started_ns >= BENCHMARK_WARMUP_NS)
+        {
+            benchmark->measuring = true;
+            benchmark->measure_ns = now;
+            benchmark->at_start = app->session.stats;
+        }
+        return;
+    }
+    double elapsed = static_cast<double>(now - benchmark->measure_ns) / 1e9;
+    if (elapsed < benchmark->seconds)
+    {
+        return;
+    }
+
+    const CoreSessionStats* stats = &app->session.stats;
+    double frames = static_cast<double>(stats->frames - benchmark->at_start.frames);
+    double run_ns = static_cast<double>(stats->run_ns - benchmark->at_start.run_ns);
+    double uploads = static_cast<double>(stats->uploads - benchmark->at_start.uploads);
+    double upload_ns = static_cast<double>(stats->upload_ns - benchmark->at_start.upload_ns);
+    double core_fps = app->session.host->av_info.timing.fps;
+    double fps = frames / elapsed;
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Benchmark: %s %ux%u, %.1f s, timing %s, %s: %.1f core fps (x%.2f), %.1f us per core frame, "
+                "%.1f us per upload (%.0f uploads)",
+                pixel_format_name(app->session.host->pixel_format), app->session.host->video.width,
+                app->session.host->video.height, elapsed, frame_timing_mode_name(app->session.timing.effective),
+                vk_present_mode_to_string(app->shell.swapchain.present_mode), fps,
+                core_fps > 0.0 ? fps / core_fps : 0.0, frames > 0.0 ? run_ns / frames / 1e3 : 0.0,
+                uploads > 0.0 ? upload_ns / uploads / 1e3 : 0.0, uploads);
+    app->running = false;
 }
 
 static const char* const ASPECT_NAMES[] = {"Core provided", "Square pixels", "4:3", "16:9", "8:7", "Stretch"};
@@ -1107,6 +1202,21 @@ int main(int argc, char** argv)
         }
 
         set_status(app, "Choose a core (list, command line, or drag and drop)");
+        // --benchmark SECONDS comes first: libretro_test_frontend --benchmark 20 <core> <content>
+        int first_path = 1;
+        bool usage_error = false;
+        if (argc > 2 && std::strcmp(argv[1], "--benchmark") == 0)
+        {
+            app->benchmark.seconds = std::atof(argv[2]);
+            first_path = 3;
+            if (app->benchmark.seconds <= 0.0 || argc <= first_path)
+            {
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Usage: --benchmark SECONDS <core> [content]");
+                app->benchmark.seconds = 0.0;
+                usage_error = true;
+                exit_code = 1;
+            }
+        }
         if (argc <= 1)
         {
             load_last_used(app);
@@ -1115,24 +1225,25 @@ int main(int argc, char** argv)
                 set_status(app, "Last used core and content filled in: press Start");
             }
         }
-        if (argc > 1)
+        if (argc > first_path)
         {
-            copy_path(app->core_path, sizeof(app->core_path), argv[1]);
+            copy_path(app->core_path, sizeof(app->core_path), argv[first_path]);
         }
-        if (argc > 2)
+        if (argc > first_path + 1)
         {
-            copy_path(app->content_path, sizeof(app->content_path), argv[2]);
+            copy_path(app->content_path, sizeof(app->content_path), argv[first_path + 1]);
         }
-        if (argc > 1)
+        if (argc > first_path && !usage_error)
         {
             core_start(app);
         }
 
-        app->running = true;
+        app->running = !usage_error;
         while (app->running)
         {
             handle_events(app);
             update_timing(app);
+            benchmark_update(app);
             run_core_frame(app);   // only when a frame is due
 
             if (app_shell_begin_frame(&app->shell))
@@ -1155,6 +1266,10 @@ int main(int argc, char** argv)
         }
 
         core_stop(app);
+        if (app->benchmark.failed)
+        {
+            exit_code = 1;
+        }
     }
 
     core_session_destroy(&app->session, &app->shell);
