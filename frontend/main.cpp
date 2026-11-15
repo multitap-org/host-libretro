@@ -451,7 +451,7 @@ static void draw_options_section(App* app);
 
 static void save_state(App* app)
 {
-    if (core_session_save_state(&app->session) || core_running(app))
+    if (core_session_save_state(&app->session, nullptr) || core_running(app))
     {
         set_status(app, "%s", app->session.message);
     }
