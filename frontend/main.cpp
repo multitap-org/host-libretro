@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -25,6 +26,7 @@
 #include "core_catalog.h"
 #include "core_session.h"
 #include "host_fs.h"
+#include "host_log.h"
 #include "libretro_host.h"
 #include "host_libretro_version.h"
 #include "picture.h"
@@ -117,9 +119,7 @@ struct App
 // Helpers
 // ---------------------------------------------------------------------------
 
-#if defined(__GNUC__)
-static void set_status(App* app, const char* format, ...) __attribute__((format(printf, 2, 3)));
-#endif
+static void set_status(App* app, const char* format, ...) HOST_PRINTF_FORMAT(2, 3);
 static void set_status(App* app, const char* format, ...)
 {
     va_list args;
@@ -178,6 +178,7 @@ static bool resolve_user_path(const char* typed, char* out, size_t out_size)
         out[0] = '\0';
         return false;
     }
+    host_fs_forward_slashes(out);   // a typed or pasted Windows path, or the home folder
     return true;
 }
 
@@ -1131,7 +1132,9 @@ static void handle_events(App* app)
             case SDL_EVENT_DROP_FILE:
                 if (event.drop.data != nullptr)
                 {
-                    handle_dropped_file(app, event.drop.data);
+                    std::string dropped = event.drop.data;
+                    host_fs_forward_slashes(dropped.data());
+                    handle_dropped_file(app, dropped.c_str());
                 }
                 break;
 
