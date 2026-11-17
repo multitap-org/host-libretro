@@ -6,7 +6,7 @@
 // Usage:
 //   libretro_core_info [--verbose] [--frames N] [--system DIR] [--save DIR]
 //                      [--options-version N] [--data-dir DIR] [--load-state N] [--save-state N]
-//                      [--set KEY=VALUE]... [--saved KEY=VALUE]... <core> [content]
+//                      [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]... <core> [content]
 //
 // Without content, cores that support it are started with no game.
 
@@ -24,7 +24,7 @@ static void print_usage()
     std::fprintf(stderr,
                  "usage: libretro_core_info [--verbose] [--frames N] [--system DIR] [--save DIR]\n"
                  "                          [--options-version N] [--data-dir DIR] [--load-state N] [--save-state N]\n"
-                 "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... <core> [content]\n"
+                 "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]... <core> [content]\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
                  "  --frames N           run N frames after loading (headless, no input)\n"
                  "  --system DIR         directory returned for GET_SYSTEM_DIRECTORY (default: none)\n"
@@ -35,7 +35,9 @@ static void print_usage()
                  "  --load-state N       load savestate slot N before running frames\n"
                  "  --save-state N       save savestate slot N after running frames\n"
                  "  --set KEY=VALUE      change a core option after loading the game (repeatable)\n"
-                 "  --saved KEY=VALUE    a saved core option value, applied when the core declares it (repeatable)\n");
+                 "  --saved KEY=VALUE    a saved core option value, applied when the core declares it (repeatable)\n"
+                 "  --device PORT=ID     plug device ID (a number) into PORT (from 0) after loading, then list\n"
+                 "                       the port's input descriptors (repeatable)\n");
 }
 
 // Prints every option the core declared, one line each, in a fixed format that
@@ -65,6 +67,25 @@ static void print_options(const LibretroOptions* options)
 }
 
 constexpr int MAX_OPTION_SETS = 16;
+constexpr int MAX_DEVICE_SETS = 8;
+
+// The descriptors the core sent for one port, by their names.
+static void print_port_descriptors(const LibretroHost* host, unsigned port)
+{
+    std::string names;
+    uint32_t count = 0;
+    for (uint32_t d = 0; d < host->input_info.descriptor_count; d++)
+    {
+        const LibretroInputDescriptor* descriptor = &host->input_info.descriptors[d];
+        if (descriptor->port == port)
+        {
+            names += count == 0 ? "" : ", ";
+            names += descriptor->description;
+            count++;
+        }
+    }
+    host_log(LogLevel::info, "Port %u descriptors: %u (%s)", port, count, names.c_str());
+}
 
 int main(int argc, char** argv)
 {
@@ -72,6 +93,9 @@ int main(int argc, char** argv)
     std::string data_saves;    // --data-dir: the config points into these
     std::string data_states;
     const char* option_sets[MAX_OPTION_SETS] = {};
+    unsigned device_ports[MAX_DEVICE_SETS] = {};
+    unsigned device_ids[MAX_DEVICE_SETS] = {};
+    int device_set_count = 0;
     bool peek_only = false;
     long load_state_slot = -1;   // -1 = don't
     long save_state_slot = -1;
@@ -141,6 +165,27 @@ int main(int argc, char** argv)
             i++;
             option_sets[option_set_count] = argv[i];
             option_set_count++;
+        }
+        else if (std::strcmp(argument, "--device") == 0 && i + 1 < argc && device_set_count < MAX_DEVICE_SETS)
+        {
+            i++;
+            char* end = nullptr;
+            unsigned long port = std::strtoul(argv[i], &end, 10);
+            if (end == argv[i] || *end != '=')
+            {
+                print_usage();
+                return 2;
+            }
+            const char* id_text = end + 1;
+            unsigned long id = std::strtoul(id_text, &end, 10);
+            if (end == id_text || *end != '\0')
+            {
+                print_usage();
+                return 2;
+            }
+            device_ports[device_set_count] = static_cast<unsigned>(port);
+            device_ids[device_set_count] = static_cast<unsigned>(id);
+            device_set_count++;
         }
         else if (std::strcmp(argument, "--saved") == 0 && i + 1 < argc && saved_count < MAX_OPTION_SETS)
         {
@@ -250,6 +295,18 @@ int main(int argc, char** argv)
         {
             exit_code = 1;
         }
+    }
+
+    // --device PORT=ID: like a user picking a controller type for a port.
+    for (int i = 0; exit_code == 0 && host->game_loaded && i < device_set_count; i++)
+    {
+        if (!libretro_host_set_port_device(host, device_ports[i], device_ids[i]))
+        {
+            host_log(LogLevel::error, "--device: no port %u", device_ports[i]);
+            exit_code = 2;
+            break;
+        }
+        print_port_descriptors(host, device_ports[i]);
     }
 
     if (exit_code == 0 && host->game_loaded && load_state_slot >= 0 &&
