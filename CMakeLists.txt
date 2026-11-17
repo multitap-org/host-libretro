@@ -188,11 +188,11 @@ if(MULTITAP_BUILD_TESTS)
 
         # Controller types: Test libretro offers three per port; plugging the two-button
         # (257) and six-button (513) pads into ports 1 and 2 must bring each port's own
-        # descriptors, by the type's names.
+        # descriptors, by the type's names; the RetroPad (1) on port 3 adds its sticks.
         add_test(NAME host_libretro_test_libretro_controller_types
-                 COMMAND libretro_core_info --device 1=257 --device 2=513 --frames 10 $<TARGET_FILE:test_libretro>)
+                 COMMAND libretro_core_info --device 1=257 --device 2=513 --device 3=1 --frames 10 $<TARGET_FILE:test_libretro>)
         set_tests_properties(host_libretro_test_libretro_controller_types PROPERTIES
-            PASS_REGULAR_EXPRESSION "SET_CONTROLLER_INFO +\\( *35\\) handled +4 port\\(s\\), 12 device type\\(s\\).*Port 1 descriptors: 7 \\(Up, Down, Left, Right, Fire, Jump, Pause\\).*Port 2 descriptors: 12 \\(Up, Down, Left, Right, A, B, C, X, Y, Z, Start, Mode\\)"
+            PASS_REGULAR_EXPRESSION "SET_CONTROLLER_INFO +\\( *35\\) handled +4 port\\(s\\), 12 device type\\(s\\).*Port 1 descriptors: 7 \\(Up, Down, Left, Right, Fire, Jump, Pause\\).*Port 2 descriptors: 12 \\(Up, Down, Left, Right, A, B, C, X, Y, Z, Start, Mode\\).*Port 3 descriptors: 20 \\(Up, .*, Start, Move X, Move Y, Aim X, Aim Y\\)"
             FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|REJECTED")
 
         # Core options through each API Test libretro can pick (it follows the version

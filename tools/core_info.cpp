@@ -6,7 +6,8 @@
 // Usage:
 //   libretro_core_info [--verbose] [--frames N] [--system DIR] [--save DIR]
 //                      [--options-version N] [--data-dir DIR] [--load-state N] [--save-state N]
-//                      [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]... <core> [content]
+//                      [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]... [--dump-frame FILE]
+//                      <core> [content]
 //
 // Without content, cores that support it are started with no game.
 
@@ -24,7 +25,8 @@ static void print_usage()
     std::fprintf(stderr,
                  "usage: libretro_core_info [--verbose] [--frames N] [--system DIR] [--save DIR]\n"
                  "                          [--options-version N] [--data-dir DIR] [--load-state N] [--save-state N]\n"
-                 "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]... <core> [content]\n"
+                 "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]...\n"
+                 "                          [--dump-frame FILE] <core> [content]\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
                  "  --frames N           run N frames after loading (headless, no input)\n"
                  "  --system DIR         directory returned for GET_SYSTEM_DIRECTORY (default: none)\n"
@@ -37,7 +39,8 @@ static void print_usage()
                  "  --set KEY=VALUE      change a core option after loading the game (repeatable)\n"
                  "  --saved KEY=VALUE    a saved core option value, applied when the core declares it (repeatable)\n"
                  "  --device PORT=ID     plug device ID (a number) into PORT (from 0) after loading, then list\n"
-                 "                       the port's input descriptors (repeatable)\n");
+                 "                       the port's input descriptors (repeatable)\n"
+                 "  --dump-frame FILE    write the last video frame to FILE as a binary PPM (P6)\n");
 }
 
 // Prints every option the core declared, one line each, in a fixed format that
@@ -69,6 +72,38 @@ static void print_options(const LibretroOptions* options)
 constexpr int MAX_OPTION_SETS = 16;
 constexpr int MAX_DEVICE_SETS = 8;
 
+// The host's last frame (XRGB8888) as a binary PPM: to look at what a core drew.
+static bool dump_frame(const LibretroVideoFrame* frame, const char* path)
+{
+    if (frame->pixels == nullptr || frame->width == 0 || frame->height == 0 || frame->format != RETRO_PIXEL_FORMAT_XRGB8888)
+    {
+        host_log(LogLevel::error, "--dump-frame: no XRGB8888 frame to write");
+        return false;
+    }
+    std::FILE* file = std::fopen(path, "wb");
+    if (file == nullptr)
+    {
+        host_log(LogLevel::error, "--dump-frame: can't write %s", path);
+        return false;
+    }
+    std::fprintf(file, "P6\n%u %u\n255\n", frame->width, frame->height);
+    for (unsigned y = 0; y < frame->height; y++)
+    {
+        const uint8_t* row = frame->pixels + static_cast<size_t>(y) * frame->width * 4;
+        for (unsigned x = 0; x < frame->width; x++)
+        {
+            uint32_t pixel = 0;
+            std::memcpy(&pixel, row + static_cast<size_t>(x) * 4, sizeof(pixel));
+            unsigned char rgb[3] = {static_cast<unsigned char>(pixel >> 16), static_cast<unsigned char>(pixel >> 8),
+                                    static_cast<unsigned char>(pixel)};
+            std::fwrite(rgb, 1, sizeof(rgb), file);
+        }
+    }
+    bool written = std::fclose(file) == 0;
+    host_log(LogLevel::info, "Frame written to %s (%ux%u)", path, frame->width, frame->height);
+    return written;
+}
+
 // The descriptors the core sent for one port, by their names.
 static void print_port_descriptors(const LibretroHost* host, unsigned port)
 {
@@ -96,6 +131,7 @@ int main(int argc, char** argv)
     unsigned device_ports[MAX_DEVICE_SETS] = {};
     unsigned device_ids[MAX_DEVICE_SETS] = {};
     int device_set_count = 0;
+    const char* dump_frame_path = nullptr;
     bool peek_only = false;
     long load_state_slot = -1;   // -1 = don't
     long save_state_slot = -1;
@@ -165,6 +201,11 @@ int main(int argc, char** argv)
             i++;
             option_sets[option_set_count] = argv[i];
             option_set_count++;
+        }
+        else if (std::strcmp(argument, "--dump-frame") == 0 && i + 1 < argc)
+        {
+            i++;
+            dump_frame_path = argv[i];
         }
         else if (std::strcmp(argument, "--device") == 0 && i + 1 < argc && device_set_count < MAX_DEVICE_SETS)
         {
@@ -333,6 +374,10 @@ int main(int argc, char** argv)
                  static_cast<unsigned long long>(stats->video_errors), static_cast<unsigned long long>(stats->audio_frames),
                  static_cast<unsigned long long>(stats->input_polls));
         if (stats->video_errors > 0)
+        {
+            exit_code = 1;
+        }
+        if (dump_frame_path != nullptr && !dump_frame(&host->video, dump_frame_path))
         {
             exit_code = 1;
         }
