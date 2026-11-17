@@ -89,6 +89,10 @@ struct App
     // The running core: host, video texture, audio, timing, input, states.
     CoreSession session = {};
 
+    // This tool's own "game focus" (Scroll Lock / F12, or the checkbox): the
+    // keyboard is the core's keyboard and the fixed joypad keys are off.
+    bool game_focus = false;
+
     char core_path[LIBRETRO_PATH_MAX]    = {};
     char content_path[LIBRETRO_PATH_MAX] = {};
     char status[512]                     = {};
@@ -434,12 +438,18 @@ static void read_pointer(const App* app, LibretroInputState* input)
     input->pointer_pressed = area->held;
 }
 
+// ImGui text fields (core path, content) and game focus keep the keyboard
+// from the joypad.
+static bool keyboard_for_joypad(const App* app)
+{
+    return !ImGui::GetIO().WantTextInput && !app->game_focus;
+}
+
 static void run_core_frame(App* app)
 {
     LibretroInputState pointer = {};
     read_pointer(app, &pointer);
-    // ImGui text fields (core path, content) keep the keyboard from the joypad.
-    CoreSessionFrame result = core_session_run_frame(&app->session, &app->shell, &pointer, !ImGui::GetIO().WantTextInput);
+    CoreSessionFrame result = core_session_run_frame(&app->session, &app->shell, &pointer, keyboard_for_joypad(app));
     if (result == CoreSessionFrame::shut_down)
     {
         set_status(app, "%s", app->session.message);
@@ -531,7 +541,7 @@ static void draw_savestate_section(App* app)
 // and the display; vsync on/off and the audio speed follow it.
 static void update_timing(App* app)
 {
-    core_session_update(&app->session, &app->shell);
+    core_session_update(&app->session, &app->shell, app->game_focus);
 }
 
 static void draw_timing_section(App* app)
@@ -811,14 +821,10 @@ static void draw_controls_window(App* app)
     ImGui::Text("Frontend: %.1f FPS (%s)", static_cast<double>(io.Framerate),
                 app->shell.vulkan.physical_device_properties.deviceName);
     ImGui::Text("Gamepad: %s", app->session.gamepad != nullptr ? SDL_GetGamepadName(app->session.gamepad) : "none");
-    bool game_focus = app->session.keyboard.game_focus;
-    if (ImGui::Checkbox("Game focus (Scroll Lock / F12)", &game_focus))
-    {
-        keyboard_input_set_game_focus(&app->session.keyboard, game_focus, app->session.host, app->shell.window);
-    }
+    ImGui::Checkbox("Game focus (Scroll Lock / F12)", &app->game_focus);
     ImGui::SetItemTooltip("While on, the keyboard is the core's keyboard (typing, computers) and the fixed joypad "
                           "keys are off. The gamepad works either way.");
-    if (game_focus)
+    if (app->game_focus)
     {
         ImGui::SameLine();
         ImGui::TextUnformatted(app->session.host->keyboard_callback != nullptr ? "(core has a keyboard callback)"
@@ -1108,9 +1114,19 @@ static void handle_events(App* app)
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
+        bool key_event = event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP;
+        if (key_event && (event.key.key == SDLK_SCROLLLOCK || event.key.key == SDLK_F12))
+        {
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
+            {
+                app->game_focus = !app->game_focus;
+            }
+            continue;   // never the core's or ImGui's
+        }
         // In game focus, keys and typed text belong to the core alone: neither
         // ImGui nor the fixed joypad keys see them.
-        if (core_session_handle_event(&app->session, &app->shell, &event, !ImGui::GetIO().WantTextInput))
+        core_session_handle_event(&app->session, &app->shell, &event, keyboard_for_joypad(app));
+        if (app->game_focus && (key_event || event.type == SDL_EVENT_TEXT_INPUT))
         {
             continue;
         }
