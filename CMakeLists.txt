@@ -186,13 +186,13 @@ if(MULTITAP_BUILD_TESTS)
             PASS_REGULAR_EXPRESSION "Ran 120 frames: 120 video frames \\(640x480\\)"
             FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|REJECTED")
 
-        # Controller types: Test libretro offers three per port; plugging the two-button
-        # (257) and six-button (513) pads into ports 1 and 2 must bring each port's own
-        # descriptors, by the type's names; the RetroPad (1) on port 3 adds its sticks.
+        # Controller types: Test libretro offers four per port; plugging the NES (257),
+        # SNES (513) and PSX DualShock (261, an ANALOG subclass) style pads into ports
+        # 1, 2 and 3 must bring each port's own descriptors, by the type's names.
         add_test(NAME host_libretro_test_libretro_controller_types
-                 COMMAND libretro_core_info --device 1=257 --device 2=513 --device 3=1 --frames 10 $<TARGET_FILE:test_libretro>)
+                 COMMAND libretro_core_info --device 1=257 --device 2=513 --device 3=261 --frames 10 $<TARGET_FILE:test_libretro>)
         set_tests_properties(host_libretro_test_libretro_controller_types PROPERTIES
-            PASS_REGULAR_EXPRESSION "SET_CONTROLLER_INFO +\\( *35\\) handled +4 port\\(s\\), 12 device type\\(s\\).*Port 1 descriptors: 7 \\(Up, Down, Left, Right, Fire, Jump, Pause\\).*Port 2 descriptors: 12 \\(Up, Down, Left, Right, A, B, C, X, Y, Z, Start, Mode\\).*Port 3 descriptors: 20 \\(Up, .*, Start, Move X, Move Y, Aim X, Aim Y\\)"
+            PASS_REGULAR_EXPRESSION "SET_CONTROLLER_INFO +\\( *35\\) handled +4 port\\(s\\), 16 device type\\(s\\).*Port 1 descriptors: 8 \\(D-Pad Up, D-Pad Down, D-Pad Left, D-Pad Right, B, A, Select, Start\\).*Port 2 descriptors: 12 \\(D-Pad Up, .*, Y, X, L, R, Select, Start\\).*Port 3 descriptors: 20 \\(D-Pad Up, .*, Cross, Circle, Square, Triangle, L1, R1, L2, R2, L3, R3, Select, Start, Left Stick, Left Stick, Right Stick, Right Stick\\)"
             FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|REJECTED")
 
         # Core options through each API Test libretro can pick (it follows the version
@@ -275,7 +275,7 @@ if(MULTITAP_BUILD_TESTS)
                  COMMAND libretro_core_info --data-dir "${STATE_DIR}" --load-state 3 --frames 5 $<TARGET_FILE:test_libretro>)
         set_tests_properties(host_libretro_state_load PROPERTIES
             FIXTURES_REQUIRED state_saved
-            PASS_REGULAR_EXPRESSION "state loaded: frame 50, page Environment.*Savestate: loaded slot 3"
+            PASS_REGULAR_EXPRESSION "state loaded: frame 50, page Callbacks.*Savestate: loaded slot 3"
             FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|REJECTED")
 
         # Slots are 1..9: slot 0 is refused.
