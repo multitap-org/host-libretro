@@ -419,7 +419,7 @@ static void read_pointer(const App* app, LibretroInputState* input)
     const ImageArea* area = &app->image_area;
     if (!area->visible || !area->hovered || area->width <= 0.0f || area->height <= 0.0f)
     {
-        input->pointer_valid = false;
+        input->cursor[0].off_screen = true;
         return;
     }
 
@@ -432,10 +432,10 @@ static void read_pointer(const App* app, LibretroInputState* input)
     normalized_x = area->frame_u0 + normalized_x * (area->frame_u1 - area->frame_u0);
     normalized_y = area->frame_v0 + normalized_y * (area->frame_v1 - area->frame_v0);
 
-    input->pointer_valid = true;
-    input->pointer_x = static_cast<int16_t>(normalized_x * 65534.0f - 32767.0f);
-    input->pointer_y = static_cast<int16_t>(normalized_y * 65534.0f - 32767.0f);
-    input->pointer_pressed = area->held;
+    input->cursor[0].off_screen = false;
+    input->cursor[0].x = static_cast<int16_t>(normalized_x * 65534.0f - 32767.0f);
+    input->cursor[0].y = static_cast<int16_t>(normalized_y * 65534.0f - 32767.0f);
+    input->cursor[0].buttons = area->held ? static_cast<uint8_t>(1u << static_cast<unsigned>(LibretroCursorButton::left)) : 0;
 }
 
 // ImGui text fields (core path, content) and game focus keep the keyboard

@@ -38,6 +38,29 @@ constexpr uint32_t LIBRETRO_STATE_SLOT_LAST  = 9;
 // RETRO_DEVICE_KEYBOARD key states are indexed by RETROK_* code.
 constexpr unsigned LIBRETRO_KEY_COUNT = RETROK_LAST;
 
+// A port's cursor: what the core reads as its mouse, pointer or lightgun
+// (whichever it asks for; the frontend moves one cursor with any device).
+struct LibretroCursorState
+{
+    bool    off_screen = false;   // outside the image (or unknown): a lightgun's reload aim
+    int16_t x = 0;                // -0x7fff..0x7fff across the core's whole frame
+    int16_t y = 0;
+    int16_t mouse_dx = 0;         // mouse motion this frame
+    int16_t mouse_dy = 0;
+    uint8_t buttons = 0;          // bit = LibretroCursorButton
+};
+
+// LibretroCursorState::buttons bits.
+enum class LibretroCursorButton
+{
+    left,          // mouse left, pointer touch, lightgun trigger
+    right,
+    middle,
+    wheel_up,
+    wheel_down,
+    reload,        // lightgun: reload (fired off the screen)
+};
+
 // Input as the frontend sees it this frame, in RetroPad terms. The frontend
 // fills this (keyboard, gamepads, mouse... mapped however it likes) and hands it
 // over with libretro_host_set_input() before libretro_host_run_frame().
@@ -46,11 +69,9 @@ struct LibretroInputState
     uint16_t joypad_buttons[LIBRETRO_MAX_PORTS] = {};   // bit N = RETRO_DEVICE_ID_JOYPAD_N
     int16_t  analog[LIBRETRO_MAX_PORTS][2][2]   = {};   // [port][left/right stick][x/y], -0x8000..0x7fff
 
-    // Pointer (port 0 only): -0x7fff..0x7fff across the image the core draws.
-    bool     pointer_valid   = false;   // false = pointer outside the image / unknown
-    int16_t  pointer_x       = 0;
-    int16_t  pointer_y       = 0;
-    bool     pointer_pressed = false;
+    // Each port's cursor (mouse, pointer, lightgun). A lightgun's aux
+    // buttons, START, SELECT and d-pad are the port's RetroPad's.
+    LibretroCursorState cursor[LIBRETRO_MAX_PORTS] = {};
 
     // Keyboard (RETRO_DEVICE_KEYBOARD, any port): 1 = key held, by RETROK_* code.
     // Cores that want typed text use the keyboard callback instead
@@ -93,10 +114,10 @@ struct LibretroHostStats
 };
 
 // What GET_INPUT_DEVICE_CAPABILITIES answers: the devices LibretroInputState
-// carries (mouse and lightgun: later).
+// carries.
 constexpr uint64_t LIBRETRO_INPUT_DEVICE_CAPABILITIES =
-    (1ull << RETRO_DEVICE_JOYPAD) | (1ull << RETRO_DEVICE_ANALOG) | (1ull << RETRO_DEVICE_POINTER) |
-    (1ull << RETRO_DEVICE_KEYBOARD);
+    (1ull << RETRO_DEVICE_JOYPAD) | (1ull << RETRO_DEVICE_MOUSE) | (1ull << RETRO_DEVICE_KEYBOARD) |
+    (1ull << RETRO_DEVICE_LIGHTGUN) | (1ull << RETRO_DEVICE_ANALOG) | (1ull << RETRO_DEVICE_POINTER);
 
 // Directories we hand to the core. Empty string = "not defined".
 struct LibretroHostConfig

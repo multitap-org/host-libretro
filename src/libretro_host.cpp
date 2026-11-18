@@ -190,19 +190,75 @@ static int16_t analog_state(const LibretroInputState* input, unsigned port, unsi
     return 0;
 }
 
+static bool cursor_button(const LibretroCursorState* cursor, LibretroCursorButton button)
+{
+    return (cursor->buttons & (1u << static_cast<unsigned>(button))) != 0;
+}
+
+// The pointer: one touch, the cursor's (pressed with its left button).
 static int16_t pointer_state(const LibretroInputState* input, unsigned port, unsigned index, unsigned id)
 {
-    if (port != 0 || index != 0 || !input->pointer_valid)
+    const LibretroCursorState* cursor = &input->cursor[port];
+    bool pressed = cursor_button(cursor, LibretroCursorButton::left) && !cursor->off_screen;
+    if (id == RETRO_DEVICE_ID_POINTER_COUNT)
+    {
+        return pressed ? 1 : 0;
+    }
+    if (index != 0)
     {
         return 0;
     }
     switch (id)
     {
-        case RETRO_DEVICE_ID_POINTER_X:       return input->pointer_x;
-        case RETRO_DEVICE_ID_POINTER_Y:       return input->pointer_y;
-        case RETRO_DEVICE_ID_POINTER_PRESSED: return input->pointer_pressed ? 1 : 0;
-        case RETRO_DEVICE_ID_POINTER_COUNT:   return input->pointer_pressed ? 1 : 0;
+        case RETRO_DEVICE_ID_POINTER_X:          return cursor->off_screen ? -0x8000 : cursor->x;
+        case RETRO_DEVICE_ID_POINTER_Y:          return cursor->off_screen ? -0x8000 : cursor->y;
+        case RETRO_DEVICE_ID_POINTER_PRESSED:    return pressed ? 1 : 0;
+        case RETRO_DEVICE_ID_POINTER_IS_OFFSCREEN: return cursor->off_screen ? 1 : 0;
+        default:                                 return 0;
+    }
+}
+
+static int16_t mouse_state(const LibretroInputState* input, unsigned port, unsigned id)
+{
+    const LibretroCursorState* cursor = &input->cursor[port];
+    switch (id)
+    {
+        case RETRO_DEVICE_ID_MOUSE_X:         return cursor->mouse_dx;
+        case RETRO_DEVICE_ID_MOUSE_Y:         return cursor->mouse_dy;
+        case RETRO_DEVICE_ID_MOUSE_LEFT:      return cursor_button(cursor, LibretroCursorButton::left) ? 1 : 0;
+        case RETRO_DEVICE_ID_MOUSE_RIGHT:     return cursor_button(cursor, LibretroCursorButton::right) ? 1 : 0;
+        case RETRO_DEVICE_ID_MOUSE_MIDDLE:    return cursor_button(cursor, LibretroCursorButton::middle) ? 1 : 0;
+        case RETRO_DEVICE_ID_MOUSE_WHEELUP:   return cursor_button(cursor, LibretroCursorButton::wheel_up) ? 1 : 0;
+        case RETRO_DEVICE_ID_MOUSE_WHEELDOWN: return cursor_button(cursor, LibretroCursorButton::wheel_down) ? 1 : 0;
         default:                              return 0;
+    }
+}
+
+// The lightgun: the cursor on the screen, its trigger and reload (aimed off
+// the screen while reloading); the rest from the port's RetroPad.
+static int16_t lightgun_state(const LibretroInputState* input, unsigned port, unsigned id)
+{
+    const LibretroCursorState* cursor = &input->cursor[port];
+    bool reload = cursor_button(cursor, LibretroCursorButton::reload);
+    bool off = cursor->off_screen || reload;
+    uint16_t pad = input->joypad_buttons[port];
+    switch (id)
+    {
+        case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X:     return off ? -0x8000 : cursor->x;
+        case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y:     return off ? -0x8000 : cursor->y;
+        case RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN: return off ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_TRIGGER:      return cursor_button(cursor, LibretroCursorButton::left) || reload ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_RELOAD:       return reload ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_AUX_A:        return (pad >> RETRO_DEVICE_ID_JOYPAD_A) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_AUX_B:        return (pad >> RETRO_DEVICE_ID_JOYPAD_B) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_AUX_C:        return (pad >> RETRO_DEVICE_ID_JOYPAD_Y) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_START:        return (pad >> RETRO_DEVICE_ID_JOYPAD_START) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_SELECT:       return (pad >> RETRO_DEVICE_ID_JOYPAD_SELECT) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_DPAD_UP:      return (pad >> RETRO_DEVICE_ID_JOYPAD_UP) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_DPAD_DOWN:    return (pad >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_DPAD_LEFT:    return (pad >> RETRO_DEVICE_ID_JOYPAD_LEFT) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_DPAD_RIGHT:   return (pad >> RETRO_DEVICE_ID_JOYPAD_RIGHT) & 1;
+        default:                                    return 0;   // the old relative X / Y: unused by current cores
     }
 }
 
@@ -236,9 +292,11 @@ static int16_t RETRO_CALLCONV input_state_callback(unsigned port, unsigned devic
         case RETRO_DEVICE_JOYPAD:  return joypad_state(&host->input, port, id);
         case RETRO_DEVICE_ANALOG:  return analog_state(&host->input, port, index, id);
         case RETRO_DEVICE_POINTER: return pointer_state(&host->input, port, index, id);
+        case RETRO_DEVICE_MOUSE:    return mouse_state(&host->input, port, id);
+        case RETRO_DEVICE_LIGHTGUN: return lightgun_state(&host->input, port, id);
         // One keyboard for every port, like other frontends.
         case RETRO_DEVICE_KEYBOARD: return id < LIBRETRO_KEY_COUNT ? static_cast<int16_t>(host->input.keys[id]) : 0;
-        default:                   return 0;   // mouse, lightgun: later
+        default:                   return 0;
     }
 }
 
