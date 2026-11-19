@@ -435,7 +435,7 @@ static void read_pointer(const App* app, LibretroInputState* input)
     input->cursor[0].off_screen = false;
     input->cursor[0].x = static_cast<int16_t>(normalized_x * 65534.0f - 32767.0f);
     input->cursor[0].y = static_cast<int16_t>(normalized_y * 65534.0f - 32767.0f);
-    input->cursor[0].buttons = area->held ? static_cast<uint8_t>(1u << static_cast<unsigned>(LibretroCursorButton::left)) : 0;
+    input->cursor[0].buttons = area->held ? static_cast<uint16_t>(1u << static_cast<unsigned>(LibretroCursorButton::left)) : 0;
 }
 
 // ImGui text fields (core path, content) and game focus keep the keyboard

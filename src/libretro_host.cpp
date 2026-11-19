@@ -234,8 +234,8 @@ static int16_t mouse_state(const LibretroInputState* input, unsigned port, unsig
     }
 }
 
-// The lightgun: the cursor on the screen, its trigger and reload (aimed off
-// the screen while reloading); the rest from the port's RetroPad.
+// The lightgun: the cursor on the screen, its trigger, reload (aimed off the
+// screen while reloading) and other buttons; its d-pad from the RetroPad.
 static int16_t lightgun_state(const LibretroInputState* input, unsigned port, unsigned id)
 {
     const LibretroCursorState* cursor = &input->cursor[port];
@@ -249,11 +249,11 @@ static int16_t lightgun_state(const LibretroInputState* input, unsigned port, un
         case RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN: return off ? 1 : 0;
         case RETRO_DEVICE_ID_LIGHTGUN_TRIGGER:      return cursor_button(cursor, LibretroCursorButton::left) || reload ? 1 : 0;
         case RETRO_DEVICE_ID_LIGHTGUN_RELOAD:       return reload ? 1 : 0;
-        case RETRO_DEVICE_ID_LIGHTGUN_AUX_A:        return (pad >> RETRO_DEVICE_ID_JOYPAD_A) & 1;
-        case RETRO_DEVICE_ID_LIGHTGUN_AUX_B:        return (pad >> RETRO_DEVICE_ID_JOYPAD_B) & 1;
-        case RETRO_DEVICE_ID_LIGHTGUN_AUX_C:        return (pad >> RETRO_DEVICE_ID_JOYPAD_Y) & 1;
-        case RETRO_DEVICE_ID_LIGHTGUN_START:        return (pad >> RETRO_DEVICE_ID_JOYPAD_START) & 1;
-        case RETRO_DEVICE_ID_LIGHTGUN_SELECT:       return (pad >> RETRO_DEVICE_ID_JOYPAD_SELECT) & 1;
+        case RETRO_DEVICE_ID_LIGHTGUN_AUX_A:        return cursor_button(cursor, LibretroCursorButton::gun_aux_a) ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_AUX_B:        return cursor_button(cursor, LibretroCursorButton::gun_aux_b) ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_AUX_C:        return cursor_button(cursor, LibretroCursorButton::gun_aux_c) ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_START:        return cursor_button(cursor, LibretroCursorButton::gun_start) ? 1 : 0;
+        case RETRO_DEVICE_ID_LIGHTGUN_SELECT:       return cursor_button(cursor, LibretroCursorButton::gun_select) ? 1 : 0;
         case RETRO_DEVICE_ID_LIGHTGUN_DPAD_UP:      return (pad >> RETRO_DEVICE_ID_JOYPAD_UP) & 1;
         case RETRO_DEVICE_ID_LIGHTGUN_DPAD_DOWN:    return (pad >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1;
         case RETRO_DEVICE_ID_LIGHTGUN_DPAD_LEFT:    return (pad >> RETRO_DEVICE_ID_JOYPAD_LEFT) & 1;

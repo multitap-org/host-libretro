@@ -47,7 +47,7 @@ struct LibretroCursorState
     int16_t y = 0;
     int16_t mouse_dx = 0;         // mouse motion this frame
     int16_t mouse_dy = 0;
-    uint8_t buttons = 0;          // bit = LibretroCursorButton
+    uint16_t buttons = 0;         // bit = LibretroCursorButton
 };
 
 // LibretroCursorState::buttons bits.
@@ -59,6 +59,11 @@ enum class LibretroCursorButton
     wheel_up,
     wheel_down,
     reload,        // lightgun: reload (fired off the screen)
+    gun_aux_a,     // lightgun: its other buttons
+    gun_aux_b,
+    gun_aux_c,
+    gun_start,
+    gun_select,
 };
 
 // Input as the frontend sees it this frame, in RetroPad terms. The frontend
@@ -69,8 +74,8 @@ struct LibretroInputState
     uint16_t joypad_buttons[LIBRETRO_MAX_PORTS] = {};   // bit N = RETRO_DEVICE_ID_JOYPAD_N
     int16_t  analog[LIBRETRO_MAX_PORTS][2][2]   = {};   // [port][left/right stick][x/y], -0x8000..0x7fff
 
-    // Each port's cursor (mouse, pointer, lightgun). A lightgun's aux
-    // buttons, START, SELECT and d-pad are the port's RetroPad's.
+    // Each port's cursor (mouse, pointer, lightgun). A lightgun's d-pad is
+    // the port's RetroPad's.
     LibretroCursorState cursor[LIBRETRO_MAX_PORTS] = {};
 
     // Keyboard (RETRO_DEVICE_KEYBOARD, any port): 1 = key held, by RETROK_* code.
