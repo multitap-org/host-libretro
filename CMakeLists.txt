@@ -1,6 +1,11 @@
 # host-libretro: our libretro implementation, as a static library.
-# Frontends (piccolo, the bundled test frontend) link it in-process; an IPC
-# process wrapper comes later for Multitap.
+# Frontends (piccolo, libretro-test-frontend) link it in-process; an IPC
+# process wrapper comes later for Multitap. No SDL, no GUI.
+# A library: it doesn't build alone. The frontend adds hosts-common first and
+# defines libretro_api (libretro.h); for the Test libretro tests, it adds
+# test-libretro (target test_libretro) before this.
+
+multitap_require(host-libretro host_common libretro_api)
 
 add_library(host_libretro STATIC
     src/libretro_core.cpp
@@ -16,8 +21,7 @@ add_library(host_libretro STATIC
 target_include_directories(host_libretro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # host-libretro's version (docs/roadmap-host-libretro.md): host_libretro_version.h,
-# HOST_LIBRETRO_VERSION. Lives in the multitap repository, so the branch suffix
-# is multitap's branch.
+# HOST_LIBRETRO_VERSION. The branch suffix is this repository's branch.
 set(HOST_LIBRETRO_VERSION_BASE 0.3)
 multitap_version(HOST_LIBRETRO_VERSION ${HOST_LIBRETRO_VERSION_BASE} "${CMAKE_CURRENT_SOURCE_DIR}")
 multitap_write_version_header("${CMAKE_CURRENT_BINARY_DIR}/generated" host_libretro HOST_LIBRETRO_VERSION "${HOST_LIBRETRO_VERSION}")
@@ -27,20 +31,10 @@ target_link_libraries(host_libretro PUBLIC host_common libretro_api)
 
 multitap_set_project_flags(host_libretro)
 
-# The test frontend bundled with host-libretro: an ImGui window to load and run
-# cores and check that every libretro function works. Not meant for playing.
-add_executable(libretro_test_frontend
-    frontend/main.cpp
-)
-target_link_libraries(libretro_test_frontend PRIVATE frontend_libretro)
-multitap_set_project_flags(libretro_test_frontend)
-multitap_copy_after_build(libretro_test_frontend "${MULTITAP_HOST_LIBRETRO_DIR}")
-
 # Development tool: load a core (+ content), log environment calls, print info, unload.
 add_executable(libretro_core_info tools/core_info.cpp)
 target_link_libraries(libretro_core_info PRIVATE host_libretro)
 multitap_set_project_flags(libretro_core_info)
-multitap_copy_after_build(libretro_core_info "${MULTITAP_HOST_LIBRETRO_DIR}")
 
 # ---------------------------------------------------------------------------
 # Tests: our own minimal test core + libretro_core_info. Run with: ctest --test-dir build
@@ -164,19 +158,10 @@ if(MULTITAP_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "Option test_core_speed = normal \\(normal\\|fast\\)"
         FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
-    # The interactive Test libretro core (test_libretro) lives in its own repo, pulled in as a
-    # submodule. Built when present. Its pages need a human, so CTest only runs a
-    # headless smoke test with it (below); the full walk-through is manual.
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test-libretro/CMakeLists.txt")
-        add_subdirectory(test-libretro)
-
-        # Into the cores folder of each program (root CMakeLists.txt), so both list it.
-        if(MULTITAP_HOST_LIBRETRO_DIR)
-            multitap_copy_after_build(test_libretro "${MULTITAP_HOST_LIBRETRO_DIR}/cores" host_libretro)
-        endif()
-        if(MULTITAP_PICCOLO_DIR)
-            multitap_copy_after_build(test_libretro "${MULTITAP_PICCOLO_DIR}/cores" piccolo)
-        endif()
+    # The interactive Test libretro core (test_libretro, its own repository): when
+    # the frontend added it. Its pages need a human, so CTest only runs headless
+    # checks with it (below); the full walk-through is manual.
+    if(TARGET test_libretro)
 
         # Headless smoke test: 120 frames of Test libretro (environment page) through the host.
         # Checks retro_run, video copy/conversion and the input path under the sanitizers.
