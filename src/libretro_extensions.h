@@ -44,7 +44,9 @@
  *       fall back to what the core did before (its own on-screen letters, ...)
  *
  * A new request replaces the one before (a TEXT request that is replaced or
- * turned OFF gets no `done`). The frontend copies the strings during the call. */
+ * turned OFF gets no `done`). The frontend copies the strings during the call.
+ * Asking for OFF changes nothing, so a core can ask it at init to know whether
+ * the frontend has the extension at all (Test libretro does). */
 
 #include "libretro.h"
 
