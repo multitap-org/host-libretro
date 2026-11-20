@@ -29,6 +29,7 @@ static void print_usage()
                  "                          [--dump-frame FILE] <core> [content]\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
                  "  --frames N           run N frames after loading (headless, no input)\n"
+                 "  --run-ahead N        the frontend's run-ahead (a core with its own takes it, libretro_multitap.h)\n"
                  "  --system DIR         directory returned for GET_SYSTEM_DIRECTORY (default: none)\n"
                  "  --save DIR           directory returned for GET_SAVE_DIRECTORY (default: none)\n"
                  "  --options-version N  core options version to report: 2, 1 or 0 (default 2)\n"
@@ -142,6 +143,7 @@ int main(int argc, char** argv)
     const char* core_path = nullptr;
     const char* content_path = nullptr;
     unsigned long frames_to_run = 0;
+    unsigned run_ahead = 0;
 
     for (int i = 1; i < argc; i++)
     {
@@ -155,6 +157,11 @@ int main(int argc, char** argv)
         {
             i++;
             frames_to_run = std::strtoul(argv[i], nullptr, 10);
+        }
+        else if (std::strcmp(argument, "--run-ahead") == 0 && i + 1 < argc)
+        {
+            i++;
+            run_ahead = static_cast<unsigned>(std::strtoul(argv[i], nullptr, 10));
         }
         else if (std::strcmp(argument, "--system") == 0 && i + 1 < argc)
         {
@@ -298,6 +305,7 @@ int main(int argc, char** argv)
 
     config.saved_options = saved;
     config.saved_option_count = static_cast<uint32_t>(saved_count);
+    libretro_host_set_run_ahead(host, run_ahead);
     if (!libretro_host_load_core(host, core_path, &config))
     {
         exit_code = 1;

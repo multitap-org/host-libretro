@@ -1,4 +1,5 @@
 #include "libretro_environment.h"
+#include "libretro_multitap.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -525,11 +526,50 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
+        // --- Multitap's own (libretro_multitap.h) ---------------------------
+
+        case RETRO_ENVIRONMENT_MULTITAP_SET_RUN_AHEAD:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            host->core_run_ahead_max = *static_cast<const unsigned*>(data);
+            std::snprintf(note, note_size, "the core's own run-ahead, up to %u frames: driven by the frontend",
+                          host->core_run_ahead_max);
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_MULTITAP_GET_RUN_AHEAD:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            *static_cast<unsigned*>(data) = libretro_host_run_ahead_applied(host);
+            return EnvironmentResult::handled;
+        }
+
         default:
         {
             return EnvironmentResult::not_supported;
         }
     }
+}
+
+// libretro's names come from the generated table; Multitap's own calls
+// (libretro_multitap.h) aren't in libretro.h.
+static const char* command_name(uint32_t command)
+{
+    if (command == RETRO_ENVIRONMENT_MULTITAP_SET_RUN_AHEAD)
+    {
+        return "MULTITAP_SET_RUN_AHEAD";
+    }
+    if (command == RETRO_ENVIRONMENT_MULTITAP_GET_RUN_AHEAD)
+    {
+        return "MULTITAP_GET_RUN_AHEAD";
+    }
+    return libretro_environment_command_name(command);
 }
 
 bool libretro_environment_handle(LibretroHost* host, uint32_t command, void* data)
@@ -549,6 +589,11 @@ bool libretro_environment_handle(LibretroHost* host, uint32_t command, void* dat
         previous_calls = host->environment_call_counts[index];
         host->environment_call_counts[index] = previous_calls + 1;
     }
+    else if ((command & 0xFF00u) == 0x4D00u)   // Multitap's private calls (asked every frame: counted too)
+    {
+        previous_calls = host->multitap_call_counts[command & 0xFFu];
+        host->multitap_call_counts[command & 0xFFu] = previous_calls + 1;
+    }
 
     // First call of each command: info. Repeats: debug, so per-frame calls
     // (GET_VARIABLE_UPDATE...) don't flood the log. Rejections: always a warning.
@@ -566,7 +611,7 @@ bool libretro_environment_handle(LibretroHost* host, uint32_t command, void* dat
 
     bool experimental = (command & RETRO_ENVIRONMENT_EXPERIMENTAL) != 0;
     host_log(level, "env %-34s (%3u%s) %-11s %s",
-             libretro_environment_command_name(command),
+             command_name(command),
              index,
              experimental ? ", exp" : "",
              outcome,
