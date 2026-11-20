@@ -26,7 +26,7 @@
 #include <cstring>
 
 #include "libretro.h"
-#include "libretro_multitap.h"
+#include "libretro_extensions.h"
 
 static retro_environment_t g_environment = nullptr;
 static retro_log_printf_t  g_log         = nullptr;
@@ -136,7 +136,7 @@ void retro_get_system_info(retro_system_info* info)
     info->block_extract    = false;
 }
 
-static bool g_run_ahead_driven = false;   // the frontend drives our "internal run-ahead" (libretro_multitap.h)
+static bool g_run_ahead_driven = false;   // the frontend drives our "internal run-ahead" (libretro_extensions.h)
 #if !defined(TEST_CORE_OMIT_RUN)
 static unsigned g_run_ahead_last = 0xFFFFFFFFu;   // what retro_run last logged
 #endif
@@ -145,7 +145,7 @@ void retro_init(void)
 {
     // A core with its own run-ahead, up to 3 frames, offers it to the frontend.
     unsigned most = 3;
-    g_run_ahead_driven = g_environment(RETRO_ENVIRONMENT_MULTITAP_SET_RUN_AHEAD, &most);
+    g_run_ahead_driven = g_environment(RETRO_ENVIRONMENT_EXT_SET_RUN_AHEAD, &most);
     core_log(RETRO_LOG_INFO, "run-ahead offered: %s\n", g_run_ahead_driven ? "the frontend drives it" : "not taken");
 
     const char* system_directory = nullptr;
@@ -285,7 +285,7 @@ void retro_run(void)
     if (g_run_ahead_driven)
     {
         unsigned frames = 0;
-        g_environment(RETRO_ENVIRONMENT_MULTITAP_GET_RUN_AHEAD, &frames);
+        g_environment(RETRO_ENVIRONMENT_EXT_GET_RUN_AHEAD, &frames);
         if (frames != g_run_ahead_last)
         {
             core_log(RETRO_LOG_INFO, "run-ahead frames: %u\n", frames);

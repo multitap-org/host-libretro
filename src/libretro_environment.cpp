@@ -1,5 +1,5 @@
 #include "libretro_environment.h"
-#include "libretro_multitap.h"
+#include "libretro_extensions.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -526,9 +526,9 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
-        // --- Multitap's own (libretro_multitap.h) ---------------------------
+        // --- Multitap's own (libretro_extensions.h) ---------------------------
 
-        case RETRO_ENVIRONMENT_MULTITAP_SET_RUN_AHEAD:
+        case RETRO_ENVIRONMENT_EXT_SET_RUN_AHEAD:
         {
             if (data == nullptr)
             {
@@ -540,7 +540,7 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
-        case RETRO_ENVIRONMENT_MULTITAP_GET_RUN_AHEAD:
+        case RETRO_ENVIRONMENT_EXT_GET_RUN_AHEAD:
         {
             if (data == nullptr)
             {
@@ -558,16 +558,16 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
 }
 
 // libretro's names come from the generated table; Multitap's own calls
-// (libretro_multitap.h) aren't in libretro.h.
+// (libretro_extensions.h) aren't in libretro.h.
 static const char* command_name(uint32_t command)
 {
-    if (command == RETRO_ENVIRONMENT_MULTITAP_SET_RUN_AHEAD)
+    if (command == RETRO_ENVIRONMENT_EXT_SET_RUN_AHEAD)
     {
-        return "MULTITAP_SET_RUN_AHEAD";
+        return "EXT_SET_RUN_AHEAD";
     }
-    if (command == RETRO_ENVIRONMENT_MULTITAP_GET_RUN_AHEAD)
+    if (command == RETRO_ENVIRONMENT_EXT_GET_RUN_AHEAD)
     {
-        return "MULTITAP_GET_RUN_AHEAD";
+        return "EXT_GET_RUN_AHEAD";
     }
     return libretro_environment_command_name(command);
 }
@@ -591,8 +591,8 @@ bool libretro_environment_handle(LibretroHost* host, uint32_t command, void* dat
     }
     else if ((command & 0xFF00u) == 0x4D00u)   // Multitap's private calls (asked every frame: counted too)
     {
-        previous_calls = host->multitap_call_counts[command & 0xFFu];
-        host->multitap_call_counts[command & 0xFFu] = previous_calls + 1;
+        previous_calls = host->extension_call_counts[command & 0xFFu];
+        host->extension_call_counts[command & 0xFFu] = previous_calls + 1;
     }
 
     // First call of each command: info. Repeats: debug, so per-frame calls

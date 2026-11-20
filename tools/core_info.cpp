@@ -29,7 +29,7 @@ static void print_usage()
                  "                          [--dump-frame FILE] <core> [content]\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
                  "  --frames N           run N frames after loading (headless, no input)\n"
-                 "  --run-ahead N        the frontend's run-ahead (a core with its own takes it, libretro_multitap.h)\n"
+                 "  --run-ahead N        the frontend's run-ahead (a core with its own takes it, libretro_extensions.h)\n"
                  "  --system DIR         directory returned for GET_SYSTEM_DIRECTORY (default: none)\n"
                  "  --save DIR           directory returned for GET_SAVE_DIRECTORY (default: none)\n"
                  "  --options-version N  core options version to report: 2, 1 or 0 (default 2)\n"

@@ -43,7 +43,7 @@ if(MULTITAP_BUILD_TESTS)
     # MODULE = a plugin loaded with dlopen/LoadLibrary, like a real core.
     add_library(test_core MODULE tests/test_core.cpp)
     target_link_libraries(test_core PRIVATE libretro_api)
-    target_include_directories(test_core PRIVATE src)   # libretro_multitap.h, as a core would carry it
+    target_include_directories(test_core PRIVATE src)   # libretro_extensions.h, as a core would carry it
     set_target_properties(test_core PROPERTIES PREFIX "" OUTPUT_NAME "test_core_libretro")
     multitap_set_project_flags(test_core)
 
