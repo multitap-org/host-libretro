@@ -630,6 +630,7 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
     host->serialization_quirks = 0;
     host->hidden = false;
     host->savestate_context = RETRO_SAVESTATE_CONTEXT_NORMAL;
+    host->text_input = LibretroTextInput{};
     // Also before set_environment: that's where cores declare their options.
     if (!libretro_options_set_saved(&host->options, config->saved_options, config->saved_option_count))
     {
@@ -954,6 +955,11 @@ void libretro_host_unload_game(LibretroHost* host)
         host->game_loaded = false;
         host_log(LogLevel::info, "Content unloaded");
     }
+    // A request belongs to the game: the next one starts without a keyboard.
+    // Its `done` must never be called once the game is gone.
+    host->text_input.mode = RETRO_EXT_TEXT_INPUT_OFF;
+    host->text_input.done = nullptr;
+    host->text_input.serial++;
 
     libretro_video_free(&host->video);
     libretro_audio_free(&host->audio);
@@ -1065,6 +1071,24 @@ void libretro_host_set_run_ahead(LibretroHost* host, unsigned frames)
 unsigned libretro_host_run_ahead_applied(const LibretroHost* host)
 {
     return host->run_ahead_frames < host->core_run_ahead_max ? host->run_ahead_frames : host->core_run_ahead_max;
+}
+
+void libretro_host_text_input_answer(LibretroHost* host, const char* text)
+{
+    LibretroTextInput* input = &host->text_input;
+    if (input->mode != RETRO_EXT_TEXT_INPUT_TEXT || input->done == nullptr)
+    {
+        return;
+    }
+    // OFF before the call: the core may ask again from inside `done`.
+    retro_ext_text_input_done_t done = input->done;
+    input->mode = RETRO_EXT_TEXT_INPUT_OFF;
+    input->done = nullptr;
+    input->serial++;
+    host_log(LogLevel::info, "Text input: %s", text != nullptr ? "answered" : "cancelled");
+    host_enter(host);
+    done(text);
+    host_leave(host);
 }
 
 bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycode, uint32_t character, uint16_t modifiers)

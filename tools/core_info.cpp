@@ -30,6 +30,8 @@ static void print_usage()
                  "  --verbose            also log repeated environment calls and core debug output\n"
                  "  --frames N           run N frames after loading (headless, no input)\n"
                  "  --run-ahead N        the frontend's run-ahead (a core with its own takes it, libretro_extensions.h)\n"
+                 "  --text-answer TEXT   answer a core's text request with TEXT (libretro_extensions.h)\n"
+                 "  --text-cancel        cancel a core's text request instead\n"
                  "  --system DIR         directory returned for GET_SYSTEM_DIRECTORY (default: none)\n"
                  "  --save DIR           directory returned for GET_SAVE_DIRECTORY (default: none)\n"
                  "  --options-version N  core options version to report: 2, 1 or 0 (default 2)\n"
@@ -145,6 +147,8 @@ int main(int argc, char** argv)
     const char* content_path = nullptr;
     unsigned long frames_to_run = 0;
     unsigned run_ahead = 0;
+    const char* text_answer = nullptr;   // --text-answer: what a TEXT request gets
+    bool text_cancel = false;
 
     for (int i = 1; i < argc; i++)
     {
@@ -158,6 +162,15 @@ int main(int argc, char** argv)
         {
             i++;
             frames_to_run = std::strtoul(argv[i], nullptr, 10);
+        }
+        else if (std::strcmp(argument, "--text-answer") == 0 && i + 1 < argc)
+        {
+            i++;
+            text_answer = argv[i];
+        }
+        else if (std::strcmp(argument, "--text-cancel") == 0)
+        {
+            text_cancel = true;
         }
         else if (std::strcmp(argument, "--run-ahead") == 0 && i + 1 < argc)
         {
@@ -378,6 +391,11 @@ int main(int argc, char** argv)
             if (!libretro_host_run_frame(host))
             {
                 break;
+            }
+            // Multitap's text input extension: answer a TEXT request between frames.
+            if (host->text_input.mode == RETRO_EXT_TEXT_INPUT_TEXT && (text_answer != nullptr || text_cancel))
+            {
+                libretro_host_text_input_answer(host, text_cancel ? nullptr : text_answer);
             }
         }
         const LibretroHostStats* stats = &host->stats;

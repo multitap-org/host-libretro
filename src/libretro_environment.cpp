@@ -3,6 +3,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 
 #include "host_log.h"
 #include "libretro.h"
@@ -73,6 +74,73 @@ static EnvironmentResult null_data(char* note, size_t note_size)
 {
     std::snprintf(note, note_size, "core passed NULL data");
     return EnvironmentResult::rejected;
+}
+
+// ---------------------------------------------------------------------------
+// Multitap's text input extension (libretro_extensions.h)
+// ---------------------------------------------------------------------------
+
+// Copies a core's UTF-8 string, cut at a character boundary if it doesn't fit
+// (a frontend draws what we keep, so no half characters). NULL -> "".
+static void copy_utf8(char* out, size_t out_size, const char* text)
+{
+    out[0] = '\0';
+    if (text == nullptr)
+    {
+        return;
+    }
+    size_t length = std::strlen(text);
+    if (length >= out_size)
+    {
+        length = out_size - 1;
+        // Back up over continuation bytes (10xxxxxx) to the start of the cut character.
+        while (length > 0 && (static_cast<unsigned char>(text[length]) & 0xC0u) == 0x80u)
+        {
+            length--;
+        }
+    }
+    std::memcpy(out, text, length);
+    out[length] = '\0';
+}
+
+static EnvironmentResult set_text_input(LibretroHost* host, const retro_ext_text_input* request, char* note,
+                                        size_t note_size)
+{
+    if (request->mode > RETRO_EXT_TEXT_INPUT_TEXT)
+    {
+        std::snprintf(note, note_size, "unknown mode %u", request->mode);
+        return EnvironmentResult::rejected;
+    }
+    if (request->mode == RETRO_EXT_TEXT_INPUT_TEXT && request->done == nullptr)
+    {
+        std::snprintf(note, note_size, "TEXT without a done callback");
+        return EnvironmentResult::rejected;
+    }
+
+    LibretroTextInput* input = &host->text_input;
+    uint32_t serial = input->serial + 1;
+    *input = LibretroTextInput{};
+    input->serial = serial;
+    input->mode = request->mode;
+    input->type = RETRO_EXT_TEXT_INPUT_TYPE_TEXT;   // an unknown type: plain text
+    if (request->type == RETRO_EXT_TEXT_INPUT_TYPE_NUMBER)
+    {
+        input->type = RETRO_EXT_TEXT_INPUT_TYPE_NUMBER;
+    }
+    if (request->mode == RETRO_EXT_TEXT_INPUT_TEXT)
+    {
+        copy_utf8(input->prompt, sizeof(input->prompt), request->prompt);
+        copy_utf8(input->initial, sizeof(input->initial), request->initial);
+        input->max_length = request->max_length;
+        input->done = request->done;
+        std::snprintf(note, note_size, "TEXT \"%s\" (%s, up to %u characters)", input->prompt,
+                      input->type == RETRO_EXT_TEXT_INPUT_TYPE_NUMBER ? "number" : "text", input->max_length);
+    }
+    else
+    {
+        std::snprintf(note, note_size, "%s", request->mode == RETRO_EXT_TEXT_INPUT_KEYS ? "KEYS" : "OFF");
+    }
+    return EnvironmentResult::handled;
 }
 
 // Handles the command and writes a short human-readable note for the log.
@@ -595,6 +663,15 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
+        case RETRO_ENVIRONMENT_EXT_SET_TEXT_INPUT:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            return set_text_input(host, static_cast<const retro_ext_text_input*>(data), note, note_size);
+        }
+
         default:
         {
             return EnvironmentResult::not_supported;
@@ -613,6 +690,10 @@ static const char* command_name(uint32_t command)
     if (command == RETRO_ENVIRONMENT_EXT_GET_RUN_AHEAD)
     {
         return "EXT_GET_RUN_AHEAD";
+    }
+    if (command == RETRO_ENVIRONMENT_EXT_SET_TEXT_INPUT)
+    {
+        return "EXT_SET_TEXT_INPUT";
     }
     return libretro_environment_command_name(command);
 }
