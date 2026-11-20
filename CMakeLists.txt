@@ -16,6 +16,7 @@ add_library(host_libretro STATIC
     src/libretro_audio.cpp
     src/libretro_options.cpp
     src/libretro_input.cpp
+    src/libretro_subsystem.cpp
 )
 
 target_include_directories(host_libretro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -157,6 +158,73 @@ if(MULTITAP_BUILD_TESTS)
              COMMAND libretro_core_info --peek $<TARGET_FILE:test_core_missing_symbol>)
     set_tests_properties(host_libretro_peek_missing_symbol PROPERTIES
         PASS_REGULAR_EXPRESSION "Peek: not a usable libretro core")
+
+    # Subsystems: the test core's "testlink" (cart A required, from memory;
+    # cart B optional, by path), seen by peeking, and an entry without an
+    # ident dropped.
+    add_test(NAME host_libretro_peek_subsystems
+             COMMAND libretro_core_info --peek $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_peek_subsystems PROPERTIES
+        PASS_REGULAR_EXPRESSION "Subsystem \"No Ident\": no usable ident, dropped.*Subsystems: 1.*Subsystem testlink \"Test Link\" id 16: \"Test Cart A\" \\(bin, required, from memory, memory \\.sava 0x100\\) \\+ \"Test Cart B\" \\(bin\\|txt, optional, by path, memory \\.savb 0x101\\)"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|retro_init")
+
+    add_test(NAME host_libretro_subsystem_two_files
+             COMMAND libretro_core_info --frames 1 --subsystem testlink $<TARGET_FILE:test_core>
+                     "${TEST_CONTENT_GOOD}" "${TEST_CONTENT_GOOD}")
+    set_tests_properties(host_libretro_subsystem_two_files PROPERTIES
+        PASS_REGULAR_EXPRESSION "Starting subsystem testlink.*special: testlink, cart A [0-9]+ bytes, cart B [^\n]*test_content_good\\.bin.*special: cart A save new"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+
+    add_test(NAME host_libretro_subsystem_optional_left_out
+             COMMAND libretro_core_info --frames 1 --subsystem testlink $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}" none)
+    set_tests_properties(host_libretro_subsystem_optional_left_out PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"Test Cart B\" left out.*special: testlink, cart A [0-9]+ bytes, cart B left out"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+
+    # Refused before the core is asked: a required file left out, an unknown
+    # subsystem, the wrong number of files. And content the core rejects.
+    add_test(NAME host_libretro_subsystem_required_missing
+             COMMAND libretro_core_info --subsystem testlink $<TARGET_FILE:test_core> none "${TEST_CONTENT_GOOD}")
+    set_tests_properties(host_libretro_subsystem_required_missing PROPERTIES
+        PASS_REGULAR_EXPRESSION "\"Test Cart A\" is required"
+        FAIL_REGULAR_EXPRESSION "Starting subsystem")
+
+    add_test(NAME host_libretro_subsystem_unknown
+             COMMAND libretro_core_info --subsystem sgb $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}")
+    set_tests_properties(host_libretro_subsystem_unknown PROPERTIES
+        PASS_REGULAR_EXPRESSION "Subsystem sgb: the core has no such subsystem")
+
+    add_test(NAME host_libretro_subsystem_file_count
+             COMMAND libretro_core_info --subsystem testlink $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}")
+    set_tests_properties(host_libretro_subsystem_file_count PROPERTIES
+        PASS_REGULAR_EXPRESSION "Subsystem testlink: 1 content files given, it takes 2")
+
+    add_test(NAME host_libretro_subsystem_rejected
+             COMMAND libretro_core_info --subsystem testlink $<TARGET_FILE:test_core> "${TEST_CONTENT_BAD}" none)
+    set_tests_properties(host_libretro_subsystem_rejected PROPERTIES WILL_FAIL TRUE)
+
+    # Each file's own save memory, named after that file: written on unload,
+    # back on the next run (the core says "restored" on its first frame).
+    set(SUBSYSTEM_DIR "${CMAKE_CURRENT_BINARY_DIR}/subsystem-test")
+    add_test(NAME host_libretro_subsystem_clean COMMAND ${CMAKE_COMMAND} -E rm -rf "${SUBSYSTEM_DIR}")
+    set_tests_properties(host_libretro_subsystem_clean PROPERTIES FIXTURES_SETUP subsystem_clean)
+
+    add_test(NAME host_libretro_subsystem_memory_first_run
+             COMMAND libretro_core_info --data-dir "${SUBSYSTEM_DIR}" --frames 1 --subsystem testlink
+                     $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}" none)
+    set_tests_properties(host_libretro_subsystem_memory_first_run PROPERTIES
+        FIXTURES_REQUIRED subsystem_clean
+        FIXTURES_SETUP subsystem_written
+        PASS_REGULAR_EXPRESSION "Test Cart A \\.sava: 32 bytes, no [^\n]*test_core/test_content_good\\.sava yet.*cart A save new.*Test Cart A \\.sava: wrote 32 bytes"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|savb")
+
+    add_test(NAME host_libretro_subsystem_memory_reload
+             COMMAND libretro_core_info --data-dir "${SUBSYSTEM_DIR}" --frames 1 --subsystem testlink
+                     $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}" "${TEST_CONTENT_BAD}")
+    set_tests_properties(host_libretro_subsystem_memory_reload PROPERTIES
+        FIXTURES_REQUIRED subsystem_written
+        PASS_REGULAR_EXPRESSION "Test Cart A \\.sava: loaded 32 bytes.*Test Cart B \\.savb: 8 bytes, no [^\n]*test_content_bad\\.savb yet.*cart A save restored"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
     # Pixel format conversion (all three libretro formats -> XRGB8888 + alpha).
     add_executable(host_libretro_video_test tests/video_conversion_test.cpp)

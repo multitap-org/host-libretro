@@ -8,6 +8,7 @@
 //                      [--options-version N] [--data-dir DIR] [--load-state N] [--save-state N]
 //                      [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]... [--dump-frame FILE]
 //                      <core> [content]
+//   libretro_core_info [options] --subsystem IDENT <core> <content|none>...
 //
 // Without content, cores that support it are started with no game.
 
@@ -27,6 +28,7 @@ static void print_usage()
                  "                          [--options-version N] [--sample-rate HZ] [--data-dir DIR] [--load-state N] [--save-state N]\n"
                  "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]...\n"
                  "                          [--dump-frame FILE] <core> [content]\n"
+                 "       libretro_core_info [options] --subsystem IDENT <core> <content|none>...\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
                  "  --frames N           run N frames after loading (headless, no input)\n"
                  "  --run-ahead N        the frontend's run-ahead (a core with its own takes it, libretro_extensions.h)\n"
@@ -44,7 +46,9 @@ static void print_usage()
                  "  --saved KEY=VALUE    a saved core option value, applied when the core declares it (repeatable)\n"
                  "  --device PORT=ID     plug device ID (a number) into PORT (from 0) after loading, then list\n"
                  "                       the port's input descriptors (repeatable)\n"
-                 "  --dump-frame FILE    write the last video frame to FILE as a binary PPM (P6)\n");
+                 "  --dump-frame FILE    write the last video frame to FILE as a binary PPM (P6)\n"
+                 "  --subsystem IDENT    start the core's subsystem IDENT with one content file per\n"
+                 "                       subsystem file, in order (\"none\" leaves an optional one out)\n");
 }
 
 // Prints every option the core declared, one line each, in a fixed format that
@@ -73,8 +77,37 @@ static void print_options(const LibretroOptions* options)
     }
 }
 
+// Every subsystem and its content files, one line each, for tests to match:
+// "Subsystem IDENT \"DESC\" id N: \"ROM\" (EXTS, required, by path, memory .EXT 0xTYPE) + ...".
+static void print_subsystems(const LibretroSubsystems* subsystems)
+{
+    host_log(LogLevel::info, "Subsystems: %zu", subsystems->list.size());
+    for (size_t i = 0; i < subsystems->list.size(); i++)
+    {
+        const LibretroSubsystem* subsystem = &subsystems->list[i];
+        std::string roms;
+        for (size_t r = 0; r < subsystem->roms.size(); r++)
+        {
+            const LibretroSubsystemRom* rom = &subsystem->roms[r];
+            char text[512] = {};
+            std::snprintf(text, sizeof(text), "%s\"%s\" (%s, %s, %s", r > 0 ? " + " : "", rom->description, rom->extensions,
+                          rom->required ? "required" : "optional", rom->need_fullpath ? "by path" : "from memory");
+            roms += text;
+            for (uint32_t m = 0; m < rom->memory_count; m++)
+            {
+                std::snprintf(text, sizeof(text), ", memory .%s 0x%x", rom->memory[m].extension, rom->memory[m].type);
+                roms += text;
+            }
+            roms += ")";
+        }
+        host_log(LogLevel::info, "Subsystem %s \"%s\" id %u: %s", subsystem->ident, subsystem->description, subsystem->id,
+                 roms.c_str());
+    }
+}
+
 constexpr int MAX_OPTION_SETS = 16;
 constexpr int MAX_DEVICE_SETS = 8;
+constexpr int MAX_SPECIAL_CONTENT = 8;
 
 // The host's last frame (XRGB8888) as a binary PPM: to look at what a core drew.
 static bool dump_frame(const LibretroVideoFrame* frame, const char* path)
@@ -145,6 +178,9 @@ int main(int argc, char** argv)
     int saved_count = 0;
     const char* core_path = nullptr;
     const char* content_path = nullptr;
+    const char* subsystem = nullptr;   // --subsystem: then every content argument is one of these
+    const char* special_paths[MAX_SPECIAL_CONTENT] = {};
+    uint32_t special_count = 0;
     unsigned long frames_to_run = 0;
     unsigned run_ahead = 0;
     const char* text_answer = nullptr;   // --text-answer: what a TEXT request gets
@@ -269,6 +305,11 @@ int main(int argc, char** argv)
             saved[saved_count].value = equals + 1;
             saved_count++;
         }
+        else if (std::strcmp(argument, "--subsystem") == 0 && i + 1 < argc)
+        {
+            i++;
+            subsystem = argv[i];
+        }
         else if (argument[0] == '-')
         {
             print_usage();
@@ -278,7 +319,12 @@ int main(int argc, char** argv)
         {
             core_path = argument;
         }
-        else if (content_path == nullptr)
+        else if (subsystem != nullptr && special_count < MAX_SPECIAL_CONTENT)
+        {
+            special_paths[special_count] = std::strcmp(argument, "none") == 0 ? nullptr : argument;
+            special_count++;
+        }
+        else if (subsystem == nullptr && content_path == nullptr)
         {
             content_path = argument;
         }
@@ -310,6 +356,7 @@ int main(int argc, char** argv)
                  info.supports_no_game ? "yes" : "no");
         host_log(LogLevel::info, "Peek: %u core options (API v%u), libretro API %u", info.option_count,
                  info.options_api, info.api_version);
+        print_subsystems(&info.subsystems);
         if (content_path != nullptr)
         {
             host_log(LogLevel::info, "Peek: %s %s", libretro_core_info_accepts(&info, content_path) ? "accepts" : "does NOT accept",
@@ -328,6 +375,13 @@ int main(int argc, char** argv)
     if (!libretro_host_load_core(host, core_path, &config))
     {
         exit_code = 1;
+    }
+    else if (subsystem != nullptr)
+    {
+        if (!libretro_host_load_game_special(host, subsystem, special_paths, special_count))
+        {
+            exit_code = 1;
+        }
     }
     else if (content_path != nullptr || host->supports_no_game)
     {

@@ -7,6 +7,7 @@
 //
 //   libretro_host_load_core()     dlopen, symbol check, set_environment, get_system_info, retro_init
 //   libretro_host_load_game()     retro_load_game, retro_get_system_av_info
+//     or libretro_host_load_game_special()   a subsystem: retro_load_game_special
 //   libretro_host_set_input()     (each frame) what the frontend's controls say
 //   libretro_host_run_frame()     (each frame) retro_run; the frame ends up in host->video,
 //                                 its audio in host->audio
@@ -20,6 +21,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "libretro.h"
 #include "libretro_audio.h"
@@ -27,6 +29,7 @@
 #include "libretro_extensions.h"
 #include "libretro_input.h"
 #include "libretro_options.h"
+#include "libretro_subsystem.h"
 #include "libretro_video.h"
 
 constexpr size_t LIBRETRO_PATH_MAX = 4096;
@@ -105,6 +108,7 @@ struct LibretroCoreInfo
     uint32_t option_count     = 0;                    // core options declared during retro_set_environment
     uint32_t options_api      = 0;                    // 2, 1, 0 (SET_VARIABLES), if option_count > 0
     unsigned api_version      = 0;                    // retro_api_version()
+    LibretroSubsystems subsystems;                    // SET_SUBSYSTEM_INFO during retro_set_environment
 };
 
 // Counters for debug UIs and tests.
@@ -184,6 +188,26 @@ struct LibretroTextInput
     uint32_t serial = 0;
 };
 
+// A core memory region the host keeps in a file (SRAM, RTC, a subsystem
+// cart's save RAM). Worked out when a game loads.
+constexpr size_t LIBRETRO_MEMORY_LABEL_MAX = 160;
+
+struct LibretroMemoryFile
+{
+    unsigned type = 0;                              // retro_get_memory_data(type)
+    char     label[LIBRETRO_MEMORY_LABEL_MAX] = {}; // for the log: "SRAM", "Game Boy ROM .sav"
+    char     path[LIBRETRO_PATH_MAX] = {};
+};
+
+// One content file of a subsystem start (libretro_host_load_game_special).
+// Kept until retro_unload_game(): the core may keep pointing into it.
+struct LibretroSpecialContent
+{
+    char     path[LIBRETRO_PATH_MAX] = {};   // empty: an optional file left out
+    uint8_t* data = nullptr;                 // when the core doesn't need a path
+    size_t   size = 0;
+};
+
 struct LibretroHost
 {
     LibretroCore core = {};
@@ -201,6 +225,20 @@ struct LibretroHost
     // Kept until retro_unload_game(): the core may keep pointing into it.
     uint8_t* content_data = nullptr;
     size_t   content_size = 0;
+
+    // A subsystem start (libretro_host_load_game_special): its ident and its
+    // content files. Empty ident = a normal start. content_path above is then
+    // the first file given.
+    char                                subsystem_ident[LIBRETRO_SUBSYSTEM_IDENT_MAX] = {};
+    std::vector<LibretroSpecialContent> special_content;
+
+    // The name per-game files use (SRAM, RTC, savestates): the content file's
+    // name without extension, the core's name without content, or for a
+    // subsystem the names of its files joined with " + " ("SGB + Tetris").
+    char game_name[LIBRETRO_PATH_MAX] = {};
+
+    // The memory regions kept in files for this game (set when it loads).
+    std::vector<LibretroMemoryFile> memory_files;
 
     bool core_initialized = false;   // retro_init() ran
     bool game_loaded      = false;   // retro_load_game() succeeded
@@ -227,6 +265,9 @@ struct LibretroHost
     // What the core said about its input (libretro_input.h), and the device the
     // frontend plugged into each port (libretro_host_set_port_device).
     LibretroInputInfo input_info = {};
+
+    // The core's subsystems (libretro_subsystem.h), from SET_SUBSYSTEM_INFO.
+    LibretroSubsystems subsystems;
     unsigned          port_devices[LIBRETRO_MAX_PORTS] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
                                                           RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD};
 
@@ -265,6 +306,14 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
 
 // content_path == nullptr starts the core without content (needs SET_SUPPORT_NO_GAME).
 bool libretro_host_load_game(LibretroHost* host, const char* content_path);
+
+// Starts subsystem `ident` (one of host->subsystems) with its content files:
+// `paths[i]` for the subsystem's roms[i], `path_count` = its number of
+// files. nullptr or "" leaves an optional file out (the core gets an empty
+// retro_game_info); a required one can't be. Each file's memory regions are
+// kept as <saves>/<core>/<that file's name>.<extension>, so a cart's save
+// follows the cart; savestates use game_name.
+bool libretro_host_load_game_special(LibretroHost* host, const char* ident, const char* const* paths, uint32_t path_count);
 
 // Replaces the input the core will see on its next input_state calls.
 void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input);

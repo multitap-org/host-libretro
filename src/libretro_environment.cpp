@@ -596,6 +596,26 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
+        // --- Content --------------------------------------------------------
+
+        case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            uint32_t sent = libretro_subsystem_store(&host->subsystems, static_cast<const retro_subsystem_info*>(data));
+            size_t kept = host->subsystems.list.size();
+            std::snprintf(note, note_size, "%u subsystem(s)%s", sent, kept < sent ? ", some dropped" : "");
+            for (size_t i = 0; i < kept; i++)
+            {
+                const LibretroSubsystem* subsystem = &host->subsystems.list[i];
+                host_log(host->peeking ? LogLevel::debug : LogLevel::info, "Subsystem %s: \"%s\", id %u, %zu content file(s)",
+                         subsystem->ident, subsystem->description, subsystem->id, subsystem->roms.size());
+            }
+            return EnvironmentResult::handled;
+        }
+
         // --- Informational: accepted, stored later when a feature needs it --
 
         case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:

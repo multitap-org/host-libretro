@@ -1,7 +1,7 @@
 # host-libretro
 
 multitap's libretro host: loads a libretro core and implements the libretro
-API (environment, video, audio, input, options, save RAM, savestates) as a
+API (environment, video, audio, input, options, subsystems, save RAM, savestates) as a
 static library, with no SDL and no GUI. Plus `libretro_core_info` (load a core
 and report what it does) and the host's tests.
 
