@@ -11,6 +11,11 @@
 //     port's device, rumble; retro_run reports what GET_INPUT_MAX_USERS and
 //     GET_INPUT_DEVICE_CAPABILITIES answered through port 0's rumble (strong =
 //     max users, weak = the low 16 bits of the capabilities), so a test can see it.
+//   - has a subsystem, "testlink": two carts started together, the first one
+//     required and from memory, the second optional and by path, each with
+//     its own save memory (types 0x100 and 0x101). Its first frame says
+//     whether cart A's save came back from a file. A second entry without an
+//     ident must be dropped by the host.
 //
 // Build variants (CMake):
 //   test_core                 the normal core
@@ -37,6 +42,16 @@ static retro_set_rumble_state_t g_rumble       = nullptr;
 static unsigned                 g_max_users    = 0;
 static uint64_t                 g_capabilities = 0;
 static unsigned                 g_port0_device = RETRO_DEVICE_JOYPAD;
+
+// Subsystem (see the header comment).
+constexpr unsigned TEST_CORE_SUBSYSTEM_LINK = 0x10;
+constexpr unsigned TEST_CORE_MEMORY_CART_A  = 0x100;
+constexpr unsigned TEST_CORE_MEMORY_CART_B  = 0x101;
+static const char  CART_A_SAVE[] = "MULTITAP cart A save";
+static bool    g_special_loaded = false;
+static bool    g_special_checked = false;
+static uint8_t g_cart_a_ram[32] = {};
+static uint8_t g_cart_b_ram[8] = {};
 
 // The controls port 0 has with its current device (three for the joypad,
 // five for the six-button pad), plus one on port 1.
@@ -114,6 +129,23 @@ void retro_set_environment(retro_environment_t callback)
         { nullptr, 0 },
     };
     g_environment(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, const_cast<retro_controller_info*>(controllers));
+
+    static const retro_subsystem_memory_info cart_a_memory[] = {
+        { "sava", TEST_CORE_MEMORY_CART_A },
+    };
+    static const retro_subsystem_memory_info cart_b_memory[] = {
+        { ".savb", TEST_CORE_MEMORY_CART_B },   // with a dot: the host must cope
+    };
+    static const retro_subsystem_rom_info link_roms[] = {
+        { "Test Cart A", "bin", false, false, true, cart_a_memory, 1 },
+        { "Test Cart B", "bin|txt", true, false, false, cart_b_memory, 1 },
+    };
+    static const retro_subsystem_info subsystems[] = {
+        { "Test Link", "testlink", link_roms, 2, TEST_CORE_SUBSYSTEM_LINK },
+        { "No Ident", nullptr, link_roms, 1, 0x11 },
+        { nullptr, nullptr, nullptr, 0, 0 },
+    };
+    g_environment(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, const_cast<retro_subsystem_info*>(subsystems));
 }
 
 void retro_set_video_refresh(retro_video_refresh_t callback)            { (void)callback; }
@@ -250,15 +282,49 @@ bool retro_load_game(const retro_game_info* game)
 
 bool retro_load_game_special(unsigned type, const retro_game_info* info, size_t count)
 {
-    (void)type;
-    (void)info;
-    (void)count;
-    return false;
+    if (type != TEST_CORE_SUBSYSTEM_LINK || count != 2 || info == nullptr)
+    {
+        core_log(RETRO_LOG_ERROR, "special: unexpected subsystem %u with %zu files\n", type, count);
+        return false;
+    }
+    // Cart A comes from memory and carries the marker.
+    static const char marker[] = "MULTITAP";
+    const retro_game_info* cart_a = &info[0];
+    if (cart_a->data == nullptr || cart_a->size < sizeof(marker) - 1 ||
+        std::memcmp(cart_a->data, marker, sizeof(marker) - 1) != 0)
+    {
+        core_log(RETRO_LOG_ERROR, "special: cart A missing or without the marker\n");
+        return false;
+    }
+    // Cart B, when given, comes by path only (need_fullpath); left out, all empty.
+    const retro_game_info* cart_b = &info[1];
+    const char* cart_b_state = "left out";
+    if (cart_b->path != nullptr)
+    {
+        if (cart_b->data != nullptr)
+        {
+            core_log(RETRO_LOG_ERROR, "special: cart B came with data, it needs a path\n");
+            return false;
+        }
+        cart_b_state = cart_b->path;
+    }
+    else if (cart_b->data != nullptr || cart_b->size != 0)
+    {
+        core_log(RETRO_LOG_ERROR, "special: cart B left out but not empty\n");
+        return false;
+    }
+    core_log(RETRO_LOG_INFO, "special: testlink, cart A %zu bytes, cart B %s\n", cart_a->size, cart_b_state);
+    std::memset(g_cart_a_ram, 0, sizeof(g_cart_a_ram));
+    std::memset(g_cart_b_ram, 0, sizeof(g_cart_b_ram));
+    g_special_loaded = true;
+    g_special_checked = false;
+    return true;
 }
 
 void retro_unload_game(void)
 {
     core_log(RETRO_LOG_INFO, "unload game\n");
+    g_special_loaded = false;
 }
 
 void retro_get_system_av_info(retro_system_av_info* info)
@@ -293,6 +359,15 @@ void retro_reset(void)
 #if !defined(TEST_CORE_OMIT_RUN)
 void retro_run(void)
 {
+    // The host loads save memory after retro_load_game_special returns: look
+    // at it on the first frame, then leave our save for the next run.
+    if (g_special_loaded && !g_special_checked)
+    {
+        g_special_checked = true;
+        bool restored = std::memcmp(g_cart_a_ram, CART_A_SAVE, sizeof(CART_A_SAVE)) == 0;
+        core_log(RETRO_LOG_INFO, "special: cart A save %s\n", restored ? "restored" : "new");
+        std::memcpy(g_cart_a_ram, CART_A_SAVE, sizeof(CART_A_SAVE));
+    }
     if (g_run_ahead_driven)
     {
         unsigned frames = 0;
@@ -348,12 +423,26 @@ unsigned retro_get_region(void)
 
 void* retro_get_memory_data(unsigned id)
 {
-    (void)id;
+    if (g_special_loaded && id == TEST_CORE_MEMORY_CART_A)
+    {
+        return g_cart_a_ram;
+    }
+    if (g_special_loaded && id == TEST_CORE_MEMORY_CART_B)
+    {
+        return g_cart_b_ram;
+    }
     return nullptr;
 }
 
 size_t retro_get_memory_size(unsigned id)
 {
-    (void)id;
+    if (g_special_loaded && id == TEST_CORE_MEMORY_CART_A)
+    {
+        return sizeof(g_cart_a_ram);
+    }
+    if (g_special_loaded && id == TEST_CORE_MEMORY_CART_B)
+    {
+        return sizeof(g_cart_b_ram);
+    }
     return 0;
 }
