@@ -43,12 +43,14 @@ if(MULTITAP_BUILD_TESTS)
     # MODULE = a plugin loaded with dlopen/LoadLibrary, like a real core.
     add_library(test_core MODULE tests/test_core.cpp)
     target_link_libraries(test_core PRIVATE libretro_api)
+    target_include_directories(test_core PRIVATE src)   # libretro_extensions.h, as a core would carry it
     set_target_properties(test_core PROPERTIES PREFIX "" OUTPUT_NAME "test_core_libretro")
     multitap_set_project_flags(test_core)
 
     # Same core without retro_run: the host must refuse it.
     add_library(test_core_missing_symbol MODULE tests/test_core.cpp)
     target_link_libraries(test_core_missing_symbol PRIVATE libretro_api)
+    target_include_directories(test_core_missing_symbol PRIVATE src)
     target_compile_definitions(test_core_missing_symbol PRIVATE TEST_CORE_OMIT_RUN=1)
     set_target_properties(test_core_missing_symbol PROPERTIES PREFIX "" OUTPUT_NAME "test_core_missing_symbol_libretro")
     multitap_set_project_flags(test_core_missing_symbol)
@@ -64,6 +66,14 @@ if(MULTITAP_BUILD_TESTS)
     add_test(NAME host_libretro_no_game
              COMMAND libretro_core_info --system /tmp $<TARGET_FILE:test_core>)
     set_tests_properties(host_libretro_no_game PROPERTIES FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+
+    # Multitap's run-ahead extension: the test core offers 3 frames; asked
+    # for 5, it gets 3 (never more than it offered).
+    add_test(NAME host_libretro_run_ahead
+             COMMAND libretro_core_info --frames 3 --run-ahead 5 $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_run_ahead PROPERTIES
+        PASS_REGULAR_EXPRESSION "run-ahead offered: the frontend drives it.*run-ahead frames: 3"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
     add_test(NAME host_libretro_content_from_memory
              COMMAND libretro_core_info $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}")

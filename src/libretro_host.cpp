@@ -616,6 +616,7 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
     host->native_pixel_formats = config->native_pixel_formats;
     host->target_sample_rate = config->target_sample_rate;
     host->fast_forwarding = false;
+    host->core_run_ahead_max = 0;   // a core offers its run-ahead again at init
     // Also before set_environment: that's where cores declare their options.
     if (!libretro_options_set_saved(&host->options, config->saved_options, config->saved_option_count))
     {
@@ -978,6 +979,16 @@ void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input
 void libretro_host_set_fast_forward(LibretroHost* host, bool fast_forwarding)
 {
     host->fast_forwarding = fast_forwarding;
+}
+
+void libretro_host_set_run_ahead(LibretroHost* host, unsigned frames)
+{
+    host->run_ahead_frames = frames;
+}
+
+unsigned libretro_host_run_ahead_applied(const LibretroHost* host)
+{
+    return host->run_ahead_frames < host->core_run_ahead_max ? host->run_ahead_frames : host->core_run_ahead_max;
 }
 
 bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycode, uint32_t character, uint16_t modifiers)

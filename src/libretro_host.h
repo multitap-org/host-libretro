@@ -227,9 +227,15 @@ struct LibretroHost
     bool               peeking            = false;   // libretro_host_peek_core: environment calls logged at debug level only
     unsigned           performance_level  = 0;
 
+    // Multitap's run-ahead extension (libretro_extensions.h): a core with its
+    // own run-ahead lets the frontend drive it instead of a core option.
+    unsigned           core_run_ahead_max = 0;   // the most the core does; 0 = it didn't offer
+    unsigned           run_ahead_frames   = 0;   // what the frontend wants (libretro_host_set_run_ahead)
+
     // Environment statistics (for logging and the debug UI later).
     // Indexed by the command number without the EXPERIMENTAL/PRIVATE bits.
     uint32_t environment_call_counts[256] = {};
+    uint32_t extension_call_counts[256] = {};   // Multitap's private calls, by their low byte
 };
 
 bool libretro_host_load_core(LibretroHost* host, const char* core_path, const LibretroHostConfig* config);
@@ -272,6 +278,13 @@ bool libretro_host_state_path(const LibretroHost* host, uint32_t slot, char* out
 // character typed (0 if none), modifiers = RETROKMOD_* bits. Typed text can
 // come as key-down events with keycode RETROK_UNKNOWN and only a character.
 // Call outside retro_run (between frames). Returns false if the core has no callback.
+// Run-ahead frames the frontend wants (its RUN-AHEAD setting). Applied by a
+// core that does its own run-ahead and offered it (libretro_extensions.h); the
+// core never gets more than it said it does.
+void libretro_host_set_run_ahead(LibretroHost* host, unsigned frames);
+// What's applied now: 0 if the core has no run-ahead of its own.
+unsigned libretro_host_run_ahead_applied(const LibretroHost* host);
+
 bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycode, uint32_t character, uint16_t modifiers);
 
 // Changes a core option. The core sees it on its next GET_VARIABLE_UPDATE /
