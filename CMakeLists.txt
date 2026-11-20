@@ -75,6 +75,19 @@ if(MULTITAP_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "run-ahead offered: the frontend drives it.*run-ahead frames: 3"
         FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
+    # Multitap's text input extension: the test core asks for the keyboard,
+    # then for a name; the answer (or the cancel) reaches its done callback.
+    add_test(NAME host_libretro_text_input
+             COMMAND libretro_core_info --frames 3 --text-answer ZELDA $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_text_input PROPERTIES
+        PASS_REGULAR_EXPRESSION "text input KEYS: taken.*text input TEXT: taken.*text input answer: ZELDA"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+    add_test(NAME host_libretro_text_input_cancel
+             COMMAND libretro_core_info --frames 3 --text-cancel $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_text_input_cancel PROPERTIES
+        PASS_REGULAR_EXPRESSION "text input TEXT: taken.*text input cancelled"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+
     add_test(NAME host_libretro_content_from_memory
              COMMAND libretro_core_info $<TARGET_FILE:test_core> "${TEST_CONTENT_GOOD}")
     set_tests_properties(host_libretro_content_from_memory PROPERTIES FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")

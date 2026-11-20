@@ -291,8 +291,42 @@ void retro_reset(void)
 }
 
 #if !defined(TEST_CORE_OMIT_RUN)
+// Multitap's text input extension: the keyboard on frame 1 (KEYS), a name on
+// frame 2 (TEXT), answered by the frontend between frames.
+static unsigned g_frames_run = 0;
+
+static void text_input_done(const char* text)
+{
+    if (text != nullptr)
+    {
+        core_log(RETRO_LOG_INFO, "text input answer: %s\n", text);
+    }
+    else
+    {
+        core_log(RETRO_LOG_INFO, "text input cancelled\n");
+    }
+}
+
+static void ask_for_text_input(void)
+{
+    g_frames_run++;
+    if (g_frames_run == 1)
+    {
+        retro_ext_text_input keys = { RETRO_EXT_TEXT_INPUT_KEYS, RETRO_EXT_TEXT_INPUT_TYPE_TEXT, nullptr, nullptr, 0, nullptr };
+        bool taken = g_environment(RETRO_ENVIRONMENT_EXT_SET_TEXT_INPUT, &keys);
+        core_log(RETRO_LOG_INFO, "text input KEYS: %s\n", taken ? "taken" : "not taken");
+    }
+    else if (g_frames_run == 2)
+    {
+        retro_ext_text_input name = { RETRO_EXT_TEXT_INPUT_TEXT, RETRO_EXT_TEXT_INPUT_TYPE_TEXT, "NAME", "LINK", 8, text_input_done };
+        bool taken = g_environment(RETRO_ENVIRONMENT_EXT_SET_TEXT_INPUT, &name);
+        core_log(RETRO_LOG_INFO, "text input TEXT: %s\n", taken ? "taken" : "not taken");
+    }
+}
+
 void retro_run(void)
 {
+    ask_for_text_input();
     if (g_run_ahead_driven)
     {
         unsigned frames = 0;

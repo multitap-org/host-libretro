@@ -24,6 +24,7 @@
 #include "libretro.h"
 #include "libretro_audio.h"
 #include "libretro_core.h"
+#include "libretro_extensions.h"
 #include "libretro_input.h"
 #include "libretro_options.h"
 #include "libretro_video.h"
@@ -166,6 +167,23 @@ struct LibretroHostConfig
 
 constexpr uint32_t LIBRETRO_CORE_OPTIONS_VERSION_MAX = 2;
 
+// The keyboard a core asked for (Multitap's text input extension,
+// libretro_extensions.h), copied: the core's strings may be gone after the call.
+// `serial` grows with every request, so a frontend sees a new one even when
+// it looks like the last.
+constexpr size_t LIBRETRO_TEXT_INPUT_MAX = 256;
+
+struct LibretroTextInput
+{
+    uint32_t mode = RETRO_EXT_TEXT_INPUT_OFF;        // retro_ext_text_input_mode
+    uint32_t type = RETRO_EXT_TEXT_INPUT_TYPE_TEXT;  // retro_ext_text_input_type
+    char     prompt[LIBRETRO_TEXT_INPUT_MAX]  = {};
+    char     initial[LIBRETRO_TEXT_INPUT_MAX] = {};
+    uint32_t max_length = 0;                         // characters; 0 = the frontend's limit
+    retro_ext_text_input_done_t done = nullptr;      // TEXT only
+    uint32_t serial = 0;
+};
+
 struct LibretroHost
 {
     LibretroCore core = {};
@@ -232,6 +250,11 @@ struct LibretroHost
     unsigned           core_run_ahead_max = 0;   // the most the core does; 0 = it didn't offer
     unsigned           run_ahead_frames   = 0;   // what the frontend wants (libretro_host_set_run_ahead)
 
+    // Multitap's text input extension: the keyboard the core wants now
+    // (OFF when none). Frontends read it; a TEXT request is answered with
+    // libretro_host_text_input_answer().
+    LibretroTextInput  text_input = {};
+
     // Environment statistics (for logging and the debug UI later).
     // Indexed by the command number without the EXPERIMENTAL/PRIVATE bits.
     uint32_t environment_call_counts[256] = {};
@@ -286,6 +309,11 @@ void libretro_host_set_run_ahead(LibretroHost* host, unsigned frames);
 unsigned libretro_host_run_ahead_applied(const LibretroHost* host);
 
 bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycode, uint32_t character, uint16_t modifiers);
+
+// Answers the core's TEXT request (host->text_input) with what was typed
+// (UTF-8), or nullptr if the user cancelled; the request is then OFF. Call
+// between frames. Does nothing if no TEXT request is pending.
+void libretro_host_text_input_answer(LibretroHost* host, const char* text);
 
 // Changes a core option. The core sees it on its next GET_VARIABLE_UPDATE /
 // GET_VARIABLE (usually during the next retro_run). Fails (logged) for an
