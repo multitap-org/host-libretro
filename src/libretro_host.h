@@ -151,6 +151,12 @@ struct LibretroHostConfig
     // upload each format to a matching GPU texture; others leave it off.
     bool native_pixel_formats = false;
 
+    // What GET_TARGET_SAMPLE_RATE answers: the sample rate the frontend plays
+    // at (its audio device's), so cores that can produce any rate (SameBoy)
+    // make exactly that and nothing is resampled. 0 = not answered (the core
+    // picks its own rate; SameBoy's own is ~2 MHz, too high to play).
+    uint32_t target_sample_rate = 0;
+
     // Core option values the frontend kept for this core and game (its
     // options file): each applied when the core declares that option, before
     // it reads it (libretro_options_set_saved). Copied at load.
@@ -198,6 +204,7 @@ struct LibretroHost
     uint32_t        core_options_version = 2;   // copied from the config at load
     uint32_t        language = 0;               // copied from the config at load (GET_LANGUAGE)
     bool            native_pixel_formats = false;   // copied from the config at load (libretro_video.h)
+    uint32_t        target_sample_rate = 0;         // copied from the config at load (GET_TARGET_SAMPLE_RATE)
 
     // What the core said about its input (libretro_input.h), and the device the
     // frontend plugged into each port (libretro_host_set_port_device).

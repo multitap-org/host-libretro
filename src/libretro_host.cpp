@@ -614,6 +614,7 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
                                      ? config->core_options_version : LIBRETRO_CORE_OPTIONS_VERSION_MAX;
     host->language = config->language;
     host->native_pixel_formats = config->native_pixel_formats;
+    host->target_sample_rate = config->target_sample_rate;
     host->fast_forwarding = false;
     // Also before set_environment: that's where cores declare their options.
     if (!libretro_options_set_saved(&host->options, config->saved_options, config->saved_option_count))

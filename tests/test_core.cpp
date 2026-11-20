@@ -141,6 +141,17 @@ void retro_init(void)
     g_environment(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &system_directory);
     core_log(RETRO_LOG_INFO, "system directory: %s\n", system_directory != nullptr ? system_directory : "(none)");
 
+    // The rate the frontend plays at, if it says (cores like SameBoy produce that rate).
+    unsigned target_rate = 0;
+    if (g_environment(RETRO_ENVIRONMENT_GET_TARGET_SAMPLE_RATE, &target_rate))
+    {
+        core_log(RETRO_LOG_INFO, "target sample rate: %u\n", target_rate);
+    }
+    else
+    {
+        core_log(RETRO_LOG_INFO, "target sample rate: not answered\n");
+    }
+
     retro_pixel_format format = RETRO_PIXEL_FORMAT_XRGB8888;
     if (!g_environment(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &format))
     {

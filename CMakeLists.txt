@@ -87,6 +87,18 @@ if(MULTITAP_BUILD_TESTS)
              COMMAND libretro_core_info $<TARGET_FILE:test_core>)
     set_tests_properties(host_libretro_null_data_refused PROPERTIES PASS_REGULAR_EXPRESSION "GET_CAN_DUPE[^\n]*REJECTED[^\n]*NULL data")
 
+    # GET_TARGET_SAMPLE_RATE: answered with the configured rate, not answered without one.
+    add_test(NAME host_libretro_target_sample_rate
+             COMMAND libretro_core_info --sample-rate 48000 $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_target_sample_rate PROPERTIES
+                         PASS_REGULAR_EXPRESSION "target sample rate: 48000"
+                         FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+    add_test(NAME host_libretro_target_sample_rate_unset
+             COMMAND libretro_core_info $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_target_sample_rate_unset PROPERTIES
+                         PASS_REGULAR_EXPRESSION "target sample rate: not answered"
+                         FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+
     add_test(NAME host_libretro_missing_core_file
              COMMAND libretro_core_info "${CMAKE_CURRENT_BINARY_DIR}/no_such_core.so")
     set_tests_properties(host_libretro_missing_core_file PROPERTIES WILL_FAIL TRUE)

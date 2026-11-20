@@ -284,6 +284,22 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
+        case RETRO_ENVIRONMENT_GET_TARGET_SAMPLE_RATE:
+        {
+            if (host->target_sample_rate == 0)
+            {
+                std::snprintf(note, note_size, "not answered (no rate configured)");
+                return EnvironmentResult::not_supported;
+            }
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            *static_cast<unsigned*>(data) = host->target_sample_rate;
+            std::snprintf(note, note_size, "%u Hz", host->target_sample_rate);
+            return EnvironmentResult::handled;
+        }
+
         case RETRO_ENVIRONMENT_GET_FASTFORWARDING:
         {
             if (data == nullptr)

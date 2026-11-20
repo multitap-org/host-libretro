@@ -24,7 +24,7 @@ static void print_usage()
 {
     std::fprintf(stderr,
                  "usage: libretro_core_info [--verbose] [--frames N] [--system DIR] [--save DIR]\n"
-                 "                          [--options-version N] [--data-dir DIR] [--load-state N] [--save-state N]\n"
+                 "                          [--options-version N] [--sample-rate HZ] [--data-dir DIR] [--load-state N] [--save-state N]\n"
                  "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]...\n"
                  "                          [--dump-frame FILE] <core> [content]\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
@@ -32,6 +32,7 @@ static void print_usage()
                  "  --system DIR         directory returned for GET_SYSTEM_DIRECTORY (default: none)\n"
                  "  --save DIR           directory returned for GET_SAVE_DIRECTORY (default: none)\n"
                  "  --options-version N  core options version to report: 2, 1 or 0 (default 2)\n"
+                 "  --sample-rate HZ     what GET_TARGET_SAMPLE_RATE answers (default: not answered)\n"
                  "  --data-dir DIR       SRAM in DIR/saves, savestates in DIR/states (default: none)\n"
                  "  --peek               only ask the core about itself (no retro_init), print it, exit\n"
                  "  --load-state N       load savestate slot N before running frames\n"
@@ -170,6 +171,11 @@ int main(int argc, char** argv)
         {
             i++;
             config.core_options_version = static_cast<uint32_t>(std::strtoul(argv[i], nullptr, 10));
+        }
+        else if (std::strcmp(argument, "--sample-rate") == 0 && i + 1 < argc)
+        {
+            i++;
+            config.target_sample_rate = static_cast<uint32_t>(std::strtoul(argv[i], nullptr, 10));
         }
         else if (std::strcmp(argument, "--peek") == 0)
         {
