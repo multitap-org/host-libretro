@@ -75,6 +75,30 @@ if(MULTITAP_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "run-ahead offered: the frontend drives it.*run-ahead frames: 3"
         FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
+    # Multitap's port adapters extension (TEST_CORE_PORT_ADAPTERS=1: the test
+    # core offers a tap on ports 1 and 2 and a two-port four score on port 1;
+    # its games suggest a tap on port 2). Players are numbered in order.
+    add_test(NAME host_libretro_adapters_none
+             COMMAND libretro_core_info $<TARGET_FILE:test_core>)
+    add_test(NAME host_libretro_adapters_auto
+             COMMAND libretro_core_info --adapter 1=auto --adapter 2=auto $<TARGET_FILE:test_core>)
+    add_test(NAME host_libretro_adapters_four_score
+             COMMAND libretro_core_info --adapter 1=2 --adapter 2=1 $<TARGET_FILE:test_core>)
+    add_test(NAME host_libretro_adapters_two_taps
+             COMMAND libretro_core_info --adapter 1=1 --adapter 2=1 $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_adapters_none PROPERTIES ENVIRONMENT "TEST_CORE_PORT_ADAPTERS=1"
+        PASS_REGULAR_EXPRESSION "port adapters: driven by the frontend.*adapters: 1=0@0 2=0@1.*port 1 device 1"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|port [2-7] device")
+    set_tests_properties(host_libretro_adapters_auto PROPERTIES ENVIRONMENT "TEST_CORE_PORT_ADAPTERS=1"
+        PASS_REGULAR_EXPRESSION "adapters: 1=0@0 2=1@1.*port 4 device 1"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|port [5-7] device")
+    set_tests_properties(host_libretro_adapters_four_score PROPERTIES ENVIRONMENT "TEST_CORE_PORT_ADAPTERS=1"
+        PASS_REGULAR_EXPRESSION "adapters: 1=2@0 2=taken.*port 3 device 1"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}|port [4-7] device")
+    set_tests_properties(host_libretro_adapters_two_taps PROPERTIES ENVIRONMENT "TEST_CORE_PORT_ADAPTERS=1"
+        PASS_REGULAR_EXPRESSION "adapters: 1=1@0 2=1@4.*port 7 device 1"
+        FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
+
     # Multitap's text input extension: the test core asks for the keyboard,
     # then for a name; the answer (or the cancel) reaches its done callback.
     add_test(NAME host_libretro_text_input
