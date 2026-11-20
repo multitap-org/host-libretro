@@ -227,7 +227,8 @@ struct LibretroHost
     // What the core said about its input (libretro_input.h), and the device the
     // frontend plugged into each port (libretro_host_set_port_device).
     LibretroInputInfo input_info = {};
-    unsigned          port_devices[LIBRETRO_MAX_PORTS] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
+    unsigned          port_devices[LIBRETRO_MAX_PORTS] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
+                                                          RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
                                                           RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD};
 
     // Rumble the core asked for (GET_RUMBLE_INTERFACE), per port: strong and

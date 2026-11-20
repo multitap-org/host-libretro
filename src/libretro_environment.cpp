@@ -546,7 +546,7 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
                 types += host->input_info.ports[p].count;
             }
             std::snprintf(note, note_size, "%u port(s), %u device type(s)%s", described, types,
-                          described > LIBRETRO_MAX_PORTS ? ", ports past 4 dropped" : "");
+                          described > LIBRETRO_MAX_PORTS ? ", ports past the host's maximum dropped" : "");
             return EnvironmentResult::handled;
         }
 

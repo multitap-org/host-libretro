@@ -13,7 +13,9 @@
 
 #include "libretro.h"
 
-constexpr unsigned LIBRETRO_MAX_PORTS = 4;
+// 8: two multitaps of 4 (SNES, PlayStation, Jaguar); the most players a
+// core is told it can have (GET_INPUT_MAX_USERS).
+constexpr unsigned LIBRETRO_MAX_PORTS = 8;
 
 constexpr size_t   LIBRETRO_INPUT_TEXT_MAX          = 128;
 constexpr uint32_t LIBRETRO_CONTROLLER_TYPES_MAX    = 32;    // per port
