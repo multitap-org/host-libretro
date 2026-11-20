@@ -20,6 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "libretro.h"
 #include "libretro_audio.h"
@@ -230,6 +231,13 @@ struct LibretroHost
     // Multitap's run-ahead extension (libretro_extensions.h): a core with its
     // own run-ahead lets the frontend drive it instead of a core option.
     unsigned           core_run_ahead_max = 0;   // the most the core does; 0 = it didn't offer
+
+    // Savestates in memory, for rollback (netplay) and run-ahead done by the
+    // frontend: what the core says about its states, frames run without
+    // output, and what kind of save the core is told this is.
+    uint64_t                serialization_quirks = 0;   // RETRO_SERIALIZATION_QUIRK_* (SET_SERIALIZATION_QUIRKS)
+    bool                    hidden = false;             // libretro_host_set_hidden: no video, no audio
+    retro_savestate_context savestate_context = RETRO_SAVESTATE_CONTEXT_NORMAL;
     unsigned           run_ahead_frames   = 0;   // what the frontend wants (libretro_host_set_run_ahead)
 
     // Environment statistics (for logging and the debug UI later).
@@ -278,6 +286,23 @@ bool libretro_host_state_path(const LibretroHost* host, uint32_t slot, char* out
 // character typed (0 if none), modifiers = RETROKMOD_* bits. Typed text can
 // come as key-down events with keycode RETROK_UNKNOWN and only a character.
 // Call outside retro_run (between frames). Returns false if the core has no callback.
+// --- Savestates in memory (rollback, the frontend's own run-ahead) ---------
+// The size the core needs now (0: no game, or no savestates).
+size_t libretro_host_state_size(LibretroHost* host);
+// The game's state into `state` (resized to fit: it only grows). False if
+// the core can't.
+bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state);
+bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t size);
+// Frames run while hidden make no picture and no sound (GET_AUDIO_VIDEO_ENABLE
+// answers 0; what the core sends anyway is dropped): the frames a rollback
+// or run-ahead runs again before the one shown.
+void libretro_host_set_hidden(LibretroHost* host, bool hidden);
+// What GET_SAVESTATE_CONTEXT answers (NORMAL, RUNAHEAD_SAME_INSTANCE,
+// ROLLBACK_NETPLAY).
+void libretro_host_set_savestate_context(LibretroHost* host, retro_savestate_context context);
+// One of the core's memory areas (RETRO_MEMORY_SYSTEM_RAM...), or false.
+bool libretro_host_memory(LibretroHost* host, unsigned id, const uint8_t** data, size_t* size);
+
 // Run-ahead frames the frontend wants (its RUN-AHEAD setting). Applied by a
 // core that does its own run-ahead and offered it (libretro_extensions.h); the
 // core never gets more than it said it does.
