@@ -31,6 +31,13 @@ target_link_libraries(host_libretro PUBLIC host_common libretro_api)
 
 multitap_set_project_flags(host_libretro)
 
+# A core linked into the program instead of loaded from a file
+# (src/libretro_linked_core.h): the browser build. The frontend links this
+# library and the core's static archive (which defines the retro_* functions).
+add_library(host_libretro_linked STATIC src/libretro_linked_core.cpp)
+target_link_libraries(host_libretro_linked PUBLIC host_libretro)
+multitap_set_project_flags(host_libretro_linked)
+
 # Development tool: load a core (+ content), log environment calls, print info, unload.
 add_executable(libretro_core_info tools/core_info.cpp)
 target_link_libraries(libretro_core_info PRIVATE host_libretro)
@@ -124,6 +131,16 @@ if(MULTITAP_BUILD_TESTS)
              COMMAND libretro_core_info --peek $<TARGET_FILE:test_core> "game.sfc")
     set_tests_properties(host_libretro_peek_wrong_extension PROPERTIES
         PASS_REGULAR_EXPRESSION "Peek: does NOT accept game\\.sfc")
+
+    # The test core linked into the program: loaded, peeked and run by file name.
+    add_executable(host_libretro_linked_core_test tests/linked_core_test.cpp tests/test_core.cpp)
+    target_link_libraries(host_libretro_linked_core_test PRIVATE host_libretro_linked)
+    target_include_directories(host_libretro_linked_core_test PRIVATE src)
+    multitap_set_project_flags(host_libretro_linked_core_test)
+    add_test(NAME host_libretro_linked_core COMMAND host_libretro_linked_core_test)
+    set_tests_properties(host_libretro_linked_core PROPERTIES
+        PASS_REGULAR_EXPRESSION "linked core: all checks passed"
+        FAIL_REGULAR_EXPRESSION "FAIL|${TEST_CORE_ERRORS}")
 
     # A loaded core must not be peeked, whatever the path spelling (symlink, "//").
     add_executable(host_libretro_peek_loaded_test tests/peek_loaded_test.cpp)
