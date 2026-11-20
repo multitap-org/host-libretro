@@ -148,7 +148,25 @@ void retro_set_environment(retro_environment_t callback)
     g_environment(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, const_cast<retro_subsystem_info*>(subsystems));
 }
 
-void retro_set_video_refresh(retro_video_refresh_t callback)            { (void)callback; }
+// A tiny game for the host's savestates: a frame counter, kept as the
+// "system RAM" (RETRO_MEMORY_SYSTEM_RAM), saved and loaded as the state, and
+// drawn as a 4x2 picture when the frontend wants video.
+static retro_video_refresh_t g_video = nullptr;
+static uint32_t g_frame = 0;
+static uint8_t g_ram[16] = {};
+#if !defined(TEST_CORE_OMIT_RUN)
+static int g_context_last = -1;   // what retro_run last logged
+#endif
+
+static void ram_from_frame(void)
+{
+    for (uint32_t i = 0; i < sizeof(g_ram); i++)
+    {
+        g_ram[i] = static_cast<uint8_t>((g_frame >> (8 * (i % 4))) + i * 7);
+    }
+}
+
+void retro_set_video_refresh(retro_video_refresh_t callback)            { g_video = callback; }
 void retro_set_audio_sample(retro_audio_sample_t callback)              { (void)callback; }
 void retro_set_audio_sample_batch(retro_audio_sample_batch_t callback)  { (void)callback; }
 void retro_set_input_poll(retro_input_poll_t callback)                  { (void)callback; }
@@ -175,6 +193,11 @@ static unsigned g_run_ahead_last = 0xFFFFFFFFu;   // what retro_run last logged
 
 void retro_init(void)
 {
+    // Its states are this machine's u32 as is: endian-dependent.
+    uint64_t quirks = RETRO_SERIALIZATION_QUIRK_ENDIAN_DEPENDENT;
+    g_environment(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS, &quirks);
+    g_frame = 0;
+    ram_from_frame();
     // A core with its own run-ahead, up to 3 frames, offers it to the frontend.
     unsigned most = 3;
     g_run_ahead_driven = g_environment(RETRO_ENVIRONMENT_EXT_SET_RUN_AHEAD, &most);
@@ -412,6 +435,25 @@ void retro_run(void)
             g_run_ahead_last = frames;
         }
     }
+    g_frame++;
+    ram_from_frame();
+    int av = 3;
+    g_environment(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av);
+    if ((av & 1) != 0 && g_video != nullptr)
+    {
+        uint32_t picture[8];
+        for (uint32_t i = 0; i < 8; i++)
+        {
+            picture[i] = g_frame * 8 + i;
+        }
+        g_video(picture, 4, 2, 16);
+    }
+    int context = 0;
+    if (g_environment(RETRO_ENVIRONMENT_GET_SAVESTATE_CONTEXT, &context) && context != g_context_last)
+    {
+        core_log(RETRO_LOG_INFO, "savestate context: %d\n", context);
+        g_context_last = context;
+    }
     if (g_rumble != nullptr)
     {
         g_rumble(0, RETRO_RUMBLE_STRONG, static_cast<uint16_t>(g_max_users));
@@ -422,21 +464,28 @@ void retro_run(void)
 
 size_t retro_serialize_size(void)
 {
-    return 0;
+    return sizeof(g_frame);
 }
 
 bool retro_serialize(void* data, size_t size)
 {
-    (void)data;
-    (void)size;
-    return false;
+    if (size < sizeof(g_frame))
+    {
+        return false;
+    }
+    std::memcpy(data, &g_frame, sizeof(g_frame));
+    return true;
 }
 
 bool retro_unserialize(const void* data, size_t size)
 {
-    (void)data;
-    (void)size;
-    return false;
+    if (size < sizeof(g_frame))
+    {
+        return false;
+    }
+    std::memcpy(&g_frame, data, sizeof(g_frame));
+    ram_from_frame();
+    return true;
 }
 
 void retro_cheat_reset(void)
@@ -465,7 +514,7 @@ void* retro_get_memory_data(unsigned id)
     {
         return g_cart_b_ram;
     }
-    return nullptr;
+    return id == RETRO_MEMORY_SYSTEM_RAM ? g_ram : nullptr;
 }
 
 size_t retro_get_memory_size(unsigned id)
@@ -478,5 +527,5 @@ size_t retro_get_memory_size(unsigned id)
     {
         return sizeof(g_cart_b_ram);
     }
-    return 0;
+    return id == RETRO_MEMORY_SYSTEM_RAM ? sizeof(g_ram) : 0;
 }

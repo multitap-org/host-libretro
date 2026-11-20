@@ -70,6 +70,12 @@ static void RETRO_CALLCONV video_refresh_callback(const void* data, unsigned wid
         return;
     }
 
+    // A hidden frame (rollback, run-ahead): nothing to show, nothing to copy.
+    if (host->hidden)
+    {
+        return;
+    }
+
     // NULL = "same image as last frame" (we said yes to GET_CAN_DUPE). Keep the old copy.
     if (data == nullptr)
     {
@@ -106,6 +112,10 @@ static void RETRO_CALLCONV video_refresh_callback(const void* data, unsigned wid
 // during the call). The frontend plays it after retro_run returns.
 static void store_audio(LibretroHost* host, const int16_t* samples, size_t frames)
 {
+    if (host->hidden)
+    {
+        return;   // a frame run again: its sound was heard the first time
+    }
     if (!libretro_audio_append(&host->audio, samples, frames))
     {
         if (host->stats.audio_errors == 0)
@@ -697,6 +707,9 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
     host->target_sample_rate = config->target_sample_rate;
     host->fast_forwarding = false;
     host->core_run_ahead_max = 0;   // a core offers its run-ahead again at init
+    host->serialization_quirks = 0;
+    host->hidden = false;
+    host->savestate_context = RETRO_SAVESTATE_CONTEXT_NORMAL;
     host->text_input = LibretroTextInput{};
     // Also before set_environment: that's where cores declare their options.
     if (!libretro_options_set_saved(&host->options, config->saved_options, config->saved_option_count))
@@ -1148,6 +1161,69 @@ void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input
 void libretro_host_set_fast_forward(LibretroHost* host, bool fast_forwarding)
 {
     host->fast_forwarding = fast_forwarding;
+}
+
+size_t libretro_host_state_size(LibretroHost* host)
+{
+    return state_size(host);
+}
+
+bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state)
+{
+    size_t size = state_size(host);
+    if (size == 0)
+    {
+        return false;
+    }
+    if (state->size() < size)
+    {
+        state->resize(size);   // grows to the core's size once, then stays
+    }
+    host_enter(host);
+    bool ok = host->core.retro_serialize(state->data(), size);
+    host_leave(host);
+    return ok;
+}
+
+bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t size)
+{
+    if (!host->game_loaded || size == 0)
+    {
+        return false;
+    }
+    host_enter(host);
+    bool ok = host->core.retro_unserialize(state, size);
+    host_leave(host);
+    return ok;
+}
+
+void libretro_host_set_hidden(LibretroHost* host, bool hidden)
+{
+    host->hidden = hidden;
+}
+
+void libretro_host_set_savestate_context(LibretroHost* host, retro_savestate_context context)
+{
+    host->savestate_context = context;
+}
+
+bool libretro_host_memory(LibretroHost* host, unsigned id, const uint8_t** data, size_t* size)
+{
+    if (!host->game_loaded || host->core.retro_get_memory_data == nullptr || host->core.retro_get_memory_size == nullptr)
+    {
+        return false;
+    }
+    host_enter(host);
+    void* memory = host->core.retro_get_memory_data(id);
+    size_t memory_size = host->core.retro_get_memory_size(id);
+    host_leave(host);
+    if (memory == nullptr || memory_size == 0)
+    {
+        return false;
+    }
+    *data = static_cast<const uint8_t*>(memory);
+    *size = memory_size;
+    return true;
 }
 
 void libretro_host_set_run_ahead(LibretroHost* host, unsigned frames)

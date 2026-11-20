@@ -348,8 +348,15 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             {
                 return null_data(note, note_size);
             }
-            // bit 0 = video, bit 1 = audio. We always want both.
-            *static_cast<int*>(data) = 3;
+            // bit 0 = video, bit 1 = audio: both, except in a hidden frame
+            // (rollback, run-ahead), which shows and plays nothing. Bit 2
+            // (fast savestates) while states are saved for those.
+            int flags = host->hidden ? 0 : 3;
+            if (host->savestate_context != RETRO_SAVESTATE_CONTEXT_NORMAL)
+            {
+                flags |= 4;
+            }
+            *static_cast<int*>(data) = flags;
             return EnvironmentResult::handled;
         }
 
@@ -618,8 +625,30 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
 
         // --- Informational: accepted, stored later when a feature needs it --
 
-        case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
         case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            // Kept: whether rollback / run-ahead by savestates can work with
+            // this core (an INCOMPLETE state reinitializes the system...).
+            host->serialization_quirks = *static_cast<const uint64_t*>(data);
+            std::snprintf(note, note_size, "0x%llx", static_cast<unsigned long long>(host->serialization_quirks));
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_GET_SAVESTATE_CONTEXT:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            *static_cast<int*>(data) = static_cast<int>(host->savestate_context);
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
         case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS:
         {
             if (data == nullptr)

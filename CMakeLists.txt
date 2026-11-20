@@ -76,6 +76,15 @@ if(MULTITAP_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "run-ahead offered: the frontend drives it.*run-ahead frames: 3"
         FAIL_REGULAR_EXPRESSION "${TEST_CORE_ERRORS}")
 
+    # Savestates in memory, hidden frames, quirks, savestate context.
+    add_executable(host_libretro_state_memory_test tests/state_memory_test.cpp)
+    target_link_libraries(host_libretro_state_memory_test PRIVATE host_libretro)
+    multitap_set_project_flags(host_libretro_state_memory_test)
+    add_test(NAME host_libretro_state_memory
+             COMMAND host_libretro_state_memory_test $<TARGET_FILE:test_core>)
+    set_tests_properties(host_libretro_state_memory PROPERTIES
+        PASS_REGULAR_EXPRESSION "state memory: all checks passed"
+        FAIL_REGULAR_EXPRESSION "FAIL|${TEST_CORE_ERRORS}")
     # Multitap's text input extension: the test core asks for the keyboard,
     # then for a name; the answer (or the cancel) reaches its done callback.
     add_test(NAME host_libretro_text_input
