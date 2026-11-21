@@ -151,7 +151,7 @@ void retro_set_environment(retro_environment_t callback)
 // A tiny game for the host's savestates: a frame counter, kept as the
 // "system RAM" (RETRO_MEMORY_SYSTEM_RAM), saved and loaded as the state, and
 // drawn as a 4x2 picture when the frontend wants video. Next to it in the
-// state, a mix of what changed the game: port 0's buttons each frame, the
+// state, a mix of what changed the game: ports 0 and 1's buttons each frame, the
 // speed option, resets (so a rewind replay can be checked exactly).
 static retro_video_refresh_t g_video = nullptr;
 static retro_input_poll_t    g_input_poll  = nullptr;
@@ -451,6 +451,7 @@ void retro_run(void)
                  std::strcmp(speed.value, "fast") == 0;
     }
     uint32_t buttons = 0;
+    uint32_t buttons2 = 0;   // port 1 too: a second player changes the game (rollback netplay's test)
     if (g_input_poll != nullptr && g_input_state != nullptr)
     {
         g_input_poll();
@@ -460,9 +461,13 @@ void retro_run(void)
             {
                 buttons |= 1u << id;
             }
+            if (g_input_state(1, RETRO_DEVICE_JOYPAD, 0, id) != 0)
+            {
+                buttons2 |= 1u << id;
+            }
         }
     }
-    g_mix = g_mix * 31u + buttons + (g_fast ? 7u : 0u) + 1u;
+    g_mix = g_mix * 31u + buttons + (buttons2 << 16) + (g_fast ? 7u : 0u) + 1u;
     g_frame++;
     ram_from_frame();
     int av = 3;
