@@ -8,6 +8,15 @@
 #include "host_log.h"
 #include "libretro_environment.h"
 
+// A rewind / replay log hears what the frontend did to the core (libretro_host_set_event_listener).
+static void tell_event(LibretroHost* host, LibretroHostEvent event, const uint8_t* data, uint32_t size)
+{
+    if (host->event_listener != nullptr)
+    {
+        host->event_listener(host->event_userdata, event, data, size);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Current instance
 // ---------------------------------------------------------------------------
@@ -670,6 +679,7 @@ bool libretro_host_load_state(LibretroHost* host, uint32_t slot)
     if (ok)
     {
         host_log(LogLevel::info, "Savestate: loaded slot %u (%zu bytes) from %s", slot, size, path);
+        tell_event(host, LibretroHostEvent::state_loaded, nullptr, 0);
     }
     else
     {
@@ -1100,6 +1110,7 @@ void libretro_host_reset(LibretroHost* host)
     host->core.retro_reset();
     host_leave(host);
     host_log(LogLevel::info, "Reset");
+    tell_event(host, LibretroHostEvent::reset, nullptr, 0);
 }
 
 void libretro_host_unload_game(LibretroHost* host)
@@ -1185,6 +1196,19 @@ bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state)
     return ok;
 }
 
+bool libretro_host_serialize_to(LibretroHost* host, uint8_t* data, size_t size)
+{
+    size_t needed = state_size(host);
+    if (needed == 0 || size < needed)
+    {
+        return false;
+    }
+    host_enter(host);
+    bool ok = host->core.retro_serialize(data, needed);
+    host_leave(host);
+    return ok;
+}
+
 bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t size)
 {
     if (!host->game_loaded || size == 0)
@@ -1252,6 +1276,20 @@ void libretro_host_text_input_answer(LibretroHost* host, const char* text)
     host_enter(host);
     done(text);
     host_leave(host);
+    uint8_t  data[LIBRETRO_TEXT_ANSWER_MAX + 2] = {};
+    uint32_t size = 1;
+    if (text != nullptr)
+    {
+        size_t length = std::strlen(text);
+        if (length > LIBRETRO_TEXT_ANSWER_MAX)
+        {
+            length = LIBRETRO_TEXT_ANSWER_MAX;
+        }
+        data[0] = 1;
+        std::memcpy(data + 1, text, length);
+        size = static_cast<uint32_t>(length) + 2;   // the '\0' too
+    }
+    tell_event(host, LibretroHostEvent::text_answer, data, size);
 }
 
 bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycode, uint32_t character, uint16_t modifiers)
@@ -1264,12 +1302,100 @@ bool libretro_host_keyboard_event(LibretroHost* host, bool down, unsigned keycod
     host_enter(host);
     host->keyboard_callback(down, keycode, character, modifiers);
     host_leave(host);
+
+    uint8_t data[11] = {};
+    data[0] = down ? 1 : 0;
+    for (uint32_t i = 0; i < 4; i++)
+    {
+        data[1 + i] = static_cast<uint8_t>(keycode >> (8 * i));
+        data[5 + i] = static_cast<uint8_t>(character >> (8 * i));
+    }
+    data[9]  = static_cast<uint8_t>(modifiers);
+    data[10] = static_cast<uint8_t>(modifiers >> 8);
+    tell_event(host, LibretroHostEvent::keyboard, data, sizeof(data));
     return true;
 }
 
 bool libretro_host_set_option(LibretroHost* host, const char* key, const char* value)
 {
-    return libretro_options_set(&host->options, key, value);
+    if (!libretro_options_set(&host->options, key, value))
+    {
+        return false;
+    }
+    if (host->event_listener != nullptr)
+    {
+        uint8_t data[LIBRETRO_OPTION_EVENT_MAX] = {};
+        size_t  key_size   = std::strlen(key) + 1;
+        size_t  value_size = std::strlen(value) + 1;
+        if (key_size + value_size <= sizeof(data))
+        {
+            std::memcpy(data, key, key_size);
+            std::memcpy(data + key_size, value, value_size);
+            tell_event(host, LibretroHostEvent::option, data, static_cast<uint32_t>(key_size + value_size));
+        }
+        else
+        {
+            host_log(LogLevel::warning, "Option %s: too long to log for rewind", key);
+        }
+    }
+    return true;
+}
+
+void libretro_host_set_event_listener(LibretroHost* host, LibretroHostEventListener listener, void* userdata)
+{
+    host->event_listener = listener;
+    host->event_userdata = userdata;
+}
+
+bool libretro_host_replay_event(LibretroHost* host, LibretroHostEvent event, const uint8_t* data, uint32_t size)
+{
+    if (event == LibretroHostEvent::reset)
+    {
+        libretro_host_reset(host);
+        return true;
+    }
+    if (event == LibretroHostEvent::option)
+    {
+        // key '\0' value '\0', both inside `size`.
+        const void* key_end = size > 0 ? std::memchr(data, 0, size) : nullptr;
+        if (key_end == nullptr)
+        {
+            return false;
+        }
+        uint32_t key_size = static_cast<uint32_t>(static_cast<const uint8_t*>(key_end) - data) + 1;
+        if (key_size >= size || data[size - 1] != 0)
+        {
+            return false;
+        }
+        return libretro_host_set_option(host, reinterpret_cast<const char*>(data),
+                                        reinterpret_cast<const char*>(data + key_size));
+    }
+    if (event == LibretroHostEvent::keyboard)
+    {
+        if (size != 11)
+        {
+            return false;
+        }
+        uint32_t keycode   = 0;
+        uint32_t character = 0;
+        for (uint32_t i = 0; i < 4; i++)
+        {
+            keycode   |= static_cast<uint32_t>(data[1 + i]) << (8 * i);
+            character |= static_cast<uint32_t>(data[5 + i]) << (8 * i);
+        }
+        uint16_t modifiers = static_cast<uint16_t>(data[9] | (data[10] << 8));
+        return libretro_host_keyboard_event(host, data[0] != 0, keycode, character, modifiers);
+    }
+    if (event == LibretroHostEvent::text_answer)
+    {
+        if (size == 0 || (data[0] != 0 && (size < 2 || data[size - 1] != 0)))
+        {
+            return false;
+        }
+        libretro_host_text_input_answer(host, data[0] != 0 ? reinterpret_cast<const char*>(data + 1) : nullptr);
+        return true;
+    }
+    return event == LibretroHostEvent::state_loaded;
 }
 
 bool libretro_host_run_frame(LibretroHost* host)

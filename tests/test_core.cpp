@@ -150,9 +150,15 @@ void retro_set_environment(retro_environment_t callback)
 
 // A tiny game for the host's savestates: a frame counter, kept as the
 // "system RAM" (RETRO_MEMORY_SYSTEM_RAM), saved and loaded as the state, and
-// drawn as a 4x2 picture when the frontend wants video.
+// drawn as a 4x2 picture when the frontend wants video. Next to it in the
+// state, a mix of what changed the game: port 0's buttons each frame, the
+// speed option, resets (so a rewind replay can be checked exactly).
 static retro_video_refresh_t g_video = nullptr;
+static retro_input_poll_t    g_input_poll  = nullptr;
+static retro_input_state_t   g_input_state = nullptr;
 static uint32_t g_frame = 0;
+static uint32_t g_mix   = 0;
+[[maybe_unused]] static bool g_fast = false;   // unused without retro_run (TEST_CORE_OMIT_RUN)
 static uint8_t g_ram[16] = {};
 #if !defined(TEST_CORE_OMIT_RUN)
 static int g_context_last = -1;   // what retro_run last logged
@@ -169,8 +175,8 @@ static void ram_from_frame(void)
 void retro_set_video_refresh(retro_video_refresh_t callback)            { g_video = callback; }
 void retro_set_audio_sample(retro_audio_sample_t callback)              { (void)callback; }
 void retro_set_audio_sample_batch(retro_audio_sample_batch_t callback)  { (void)callback; }
-void retro_set_input_poll(retro_input_poll_t callback)                  { (void)callback; }
-void retro_set_input_state(retro_input_state_t callback)                { (void)callback; }
+void retro_set_input_poll(retro_input_poll_t callback)                  { g_input_poll = callback; }
+void retro_set_input_state(retro_input_state_t callback)                { g_input_state = callback; }
 
 unsigned retro_api_version(void)
 {
@@ -197,6 +203,7 @@ void retro_init(void)
     uint64_t quirks = RETRO_SERIALIZATION_QUIRK_ENDIAN_DEPENDENT;
     g_environment(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS, &quirks);
     g_frame = 0;
+    g_mix   = 0;
     ram_from_frame();
     // A core with its own run-ahead, up to 3 frames, offers it to the frontend.
     unsigned most = 3;
@@ -377,6 +384,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 
 void retro_reset(void)
 {
+    g_mix ^= 0xABCD1234u;
 }
 
 #if !defined(TEST_CORE_OMIT_RUN)
@@ -435,6 +443,26 @@ void retro_run(void)
             g_run_ahead_last = frames;
         }
     }
+    bool updated = false;
+    if (g_environment(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
+    {
+        retro_variable speed = { "test_core_speed", nullptr };
+        g_fast = g_environment(RETRO_ENVIRONMENT_GET_VARIABLE, &speed) && speed.value != nullptr &&
+                 std::strcmp(speed.value, "fast") == 0;
+    }
+    uint32_t buttons = 0;
+    if (g_input_poll != nullptr && g_input_state != nullptr)
+    {
+        g_input_poll();
+        for (unsigned id = 0; id < 16; id++)
+        {
+            if (g_input_state(0, RETRO_DEVICE_JOYPAD, 0, id) != 0)
+            {
+                buttons |= 1u << id;
+            }
+        }
+    }
+    g_mix = g_mix * 31u + buttons + (g_fast ? 7u : 0u) + 1u;
     g_frame++;
     ram_from_frame();
     int av = 3;
@@ -464,26 +492,28 @@ void retro_run(void)
 
 size_t retro_serialize_size(void)
 {
-    return sizeof(g_frame);
+    return sizeof(g_frame) + sizeof(g_mix);
 }
 
 bool retro_serialize(void* data, size_t size)
 {
-    if (size < sizeof(g_frame))
+    if (size < sizeof(g_frame) + sizeof(g_mix))
     {
         return false;
     }
     std::memcpy(data, &g_frame, sizeof(g_frame));
+    std::memcpy(static_cast<uint8_t*>(data) + sizeof(g_frame), &g_mix, sizeof(g_mix));
     return true;
 }
 
 bool retro_unserialize(const void* data, size_t size)
 {
-    if (size < sizeof(g_frame))
+    if (size < sizeof(g_frame) + sizeof(g_mix))
     {
         return false;
     }
     std::memcpy(&g_frame, data, sizeof(g_frame));
+    std::memcpy(&g_mix, static_cast<const uint8_t*>(data) + sizeof(g_frame), sizeof(g_mix));
     ram_from_frame();
     return true;
 }

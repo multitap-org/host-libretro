@@ -33,6 +33,10 @@
 #include "libretro_video.h"
 
 constexpr size_t LIBRETRO_PATH_MAX = 4096;
+// Rewind / replay events (LibretroHostEvent): the longest text answer and
+// option (key + value) kept.
+constexpr size_t LIBRETRO_TEXT_ANSWER_MAX = 256;
+constexpr size_t LIBRETRO_OPTION_EVENT_MAX = 256;
 
 // Savestate slots 1..9, one file each (<game>.state1 .. .state9; decided by
 // Andrés for the quick menu: no slot 0). Old .state0 files are left alone.
@@ -73,6 +77,22 @@ enum class LibretroCursorButton
 // Input as the frontend sees it this frame, in RetroPad terms. The frontend
 // fills this (keyboard, gamepads, mouse... mapped however it likes) and hands it
 // over with libretro_host_set_input() before libretro_host_run_frame().
+// What the frontend does to the core between frames that the core's state
+// doesn't carry and its input doesn't say: a rewind / replay log keeps these
+// next to the input (libretro_host_set_event_listener) and gives them back
+// to the core in order (libretro_host_replay_event).
+enum class LibretroHostEvent : uint8_t
+{
+    option,         // data: key '\0' value '\0'
+    reset,          // no data
+    keyboard,       // data: down (1), keycode (4), character (4), modifiers (2), little-endian
+    text_answer,    // data: answered (1) then the text and '\0' (cancelled: just 0)
+    state_loaded,   // a savestate replaced the game's state (no data); never replayed
+};
+
+// Called after the event reached the core. `data` lives only during the call.
+typedef void (*LibretroHostEventListener)(void* userdata, LibretroHostEvent event, const uint8_t* data, uint32_t size);
+
 struct LibretroInputState
 {
     uint16_t joypad_buttons[LIBRETRO_MAX_PORTS] = {};   // bit N = RETRO_DEVICE_ID_JOYPAD_N
@@ -294,6 +314,8 @@ struct LibretroHost
     // frontend: what the core says about its states, frames run without
     // output, and what kind of save the core is told this is.
     uint64_t                serialization_quirks = 0;   // RETRO_SERIALIZATION_QUIRK_* (SET_SERIALIZATION_QUIRKS)
+    LibretroHostEventListener event_listener = nullptr;  // libretro_host_set_event_listener
+    void*                     event_userdata = nullptr;
     bool                    hidden = false;             // libretro_host_set_hidden: no video, no audio
     retro_savestate_context savestate_context = RETRO_SAVESTATE_CONTEXT_NORMAL;
     unsigned           run_ahead_frames   = 0;   // what the frontend wants (libretro_host_set_run_ahead)
@@ -364,6 +386,17 @@ size_t libretro_host_state_size(LibretroHost* host);
 // the core can't.
 bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state);
 bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t size);
+// The same into memory the caller holds (a rewind slot): `size` must be at
+// least libretro_host_state_size(). No allocation.
+bool libretro_host_serialize_to(LibretroHost* host, uint8_t* data, size_t size);
+// Every option change, reset, keyboard event, text answer and savestate
+// load from now on is told to `listener` (nullptr: none). libretro_host_unserialize
+// (the frontend's own memory states) isn't an event.
+void libretro_host_set_event_listener(LibretroHost* host, LibretroHostEventListener listener, void* userdata);
+// Gives a recorded event back to the core (option, reset, keyboard, text
+// answer; state_loaded is ignored). The listener hears it again. False if
+// the data is malformed or the core refused it.
+bool libretro_host_replay_event(LibretroHost* host, LibretroHostEvent event, const uint8_t* data, uint32_t size);
 // Frames run while hidden make no picture and no sound (GET_AUDIO_VIDEO_ENABLE
 // answers 0; what the core sends anyway is dropped): the frames a rollback
 // or run-ahead runs again before the one shown.
