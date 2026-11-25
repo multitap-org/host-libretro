@@ -616,10 +616,9 @@ static size_t state_size(LibretroHost* host)
 bool libretro_host_save_state(LibretroHost* host, uint32_t slot)
 {
     char path[LIBRETRO_PATH_MAX] = {};
-    if (slot < LIBRETRO_STATE_SLOT_FIRST || slot > LIBRETRO_STATE_SLOT_LAST ||
-        !libretro_host_state_path(host, slot, path, sizeof(path)))
+    if (!libretro_host_state_path(host, slot, path, sizeof(path)))
     {
-        host_log(LogLevel::error, "Savestate: no slot %u (or no data directory)", slot);
+        host_log(LogLevel::error, "Savestate: slot %u has no file (no data directory)", slot);
         return false;
     }
     size_t size = state_size(host);
@@ -651,10 +650,9 @@ bool libretro_host_save_state(LibretroHost* host, uint32_t slot)
 bool libretro_host_load_state(LibretroHost* host, uint32_t slot)
 {
     char path[LIBRETRO_PATH_MAX] = {};
-    if (!host->game_loaded || slot < LIBRETRO_STATE_SLOT_FIRST || slot > LIBRETRO_STATE_SLOT_LAST ||
-        !libretro_host_state_path(host, slot, path, sizeof(path)))
+    if (!host->game_loaded || !libretro_host_state_path(host, slot, path, sizeof(path)))
     {
-        host_log(LogLevel::error, "Savestate: no slot %u (or nothing running, or no data directory)", slot);
+        host_log(LogLevel::error, "Savestate: can't load slot %u (nothing running, or no data directory)", slot);
         return false;
     }
     if (!host_fs_exists(path))
