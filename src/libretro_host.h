@@ -38,10 +38,9 @@ constexpr size_t LIBRETRO_PATH_MAX = 4096;
 constexpr size_t LIBRETRO_TEXT_ANSWER_MAX = 256;
 constexpr size_t LIBRETRO_OPTION_EVENT_MAX = 256;
 
-// Savestate slots 1..9, one file each (<game>.state1 .. .state9; decided by
-// Andrés for the quick menu: no slot 0). Old .state0 files are left alone.
-constexpr uint32_t LIBRETRO_STATE_SLOT_FIRST = 1;
-constexpr uint32_t LIBRETRO_STATE_SLOT_LAST  = 9;
+// Savestate slots: any number, one file each (<game>.state<N>). How many a
+// frontend offers is its own limit (Andrés, 2026-11-25: the host takes any
+// slot, the frontend decides the range).
 
 // RETRO_DEVICE_KEYBOARD key states are indexed by RETROK_* code.
 constexpr unsigned LIBRETRO_KEY_COUNT = RETROK_LAST;
@@ -365,8 +364,8 @@ void libretro_host_set_fast_forward(LibretroHost* host, bool fast_forwarding);
 bool libretro_host_save_memory(LibretroHost* host);
 
 // Savestates: retro_serialize into <data>/states/<core>/<game>.state<slot>,
-// and back with retro_unserialize. Call between frames. Return false if the
-// core can't (serialize size 0), the slot is out of range, there's no data
+// and back with retro_unserialize. Any slot number. Call between frames.
+// Return false if the core can't (serialize size 0), there's no data
 // directory, or a file operation failed; the reason is logged.
 bool libretro_host_save_state(LibretroHost* host, uint32_t slot);
 bool libretro_host_load_state(LibretroHost* host, uint32_t slot);
