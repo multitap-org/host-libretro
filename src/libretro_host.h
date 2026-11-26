@@ -385,6 +385,10 @@ size_t libretro_host_state_size(LibretroHost* host);
 // the core can't.
 bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state);
 bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t size);
+// A savestate the frontend kept in memory loaded as the player's own load
+// (UNDO LOAD STATE): like libretro_host_load_state, the listener hears
+// state_loaded (the rewind history jumps there). False if the core refused it.
+bool libretro_host_load_state_memory(LibretroHost* host, const uint8_t* state, size_t size);
 // The same into memory the caller holds (a rewind slot): `size` must be at
 // least libretro_host_state_size(). No allocation.
 bool libretro_host_serialize_to(LibretroHost* host, uint8_t* data, size_t size);

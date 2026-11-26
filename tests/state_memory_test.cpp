@@ -2,7 +2,8 @@
 // run-ahead's base) with the test core, whose state is a frame counter kept
 // as its system RAM: a state saved and loaded brings the RAM back, hidden
 // frames draw nothing, the core's quirks are kept and GET_SAVESTATE_CONTEXT
-// answers what the frontend set.
+// answers what the frontend set; a state in memory loaded as the player's
+// load is heard by the event listener.
 //
 // Usage: host_libretro_state_memory_test <test core>
 // Exit code 0 = all checks passed. Each failure is printed.
@@ -128,9 +129,26 @@ int main(int argc, char** argv)
     uint32_t events = g_events;
     check(libretro_host_replay_event(host, LibretroHostEvent::reset, nullptr, 0) && g_events == events + 1,
           "reset replayed");
+
+    // A state in memory loaded as the player's load (UNDO LOAD STATE): the
+    // RAM is back and the listener hears state_loaded; unserialize stays silent.
+    std::vector<uint8_t> kept;
+    check(libretro_host_serialize(host, &kept), "state kept for a load from memory");
+    uint32_t kept_frame = ram_frame(host);
+    libretro_host_run_frame(host);
+    events = g_events;
+    check(libretro_host_unserialize(host, kept.data(), kept.size()) && g_events == events,
+          "unserialize isn't an event");
+    libretro_host_run_frame(host);
+    check(libretro_host_load_state_memory(host, kept.data(), kept.size()) && ram_frame(host) == kept_frame,
+          "load from memory: the RAM is back");
+    check(g_events == events + 1 && g_last_event == LibretroHostEvent::state_loaded, "load from memory heard");
+    check(!libretro_host_load_state_memory(host, kept.data(), 0), "load from memory: nothing refused");
+
+    events = g_events;
     libretro_host_set_event_listener(host, nullptr, nullptr);
     libretro_host_reset(host);
-    check(g_events == events + 1, "no listener, nothing heard");
+    check(g_events == events, "no listener, nothing heard");
 
     libretro_host_unload_core(host);
     delete host;
