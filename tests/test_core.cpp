@@ -28,6 +28,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "libretro.h"
@@ -192,6 +193,65 @@ void retro_get_system_info(retro_system_info* info)
     info->block_extract    = false;
 }
 
+// Multitap's port adapters extension, with TEST_CORE_PORT_ADAPTERS=1 in the
+// environment (so the other tests keep the plain controller info): port 1
+// takes a tap or a two-port "four score", port 2 a tap; games suggest a tap
+// on port 2.
+static const unsigned TEST_TAP = 1;
+static const unsigned TEST_FOUR_SCORE = 2;
+static bool g_port_adapters = false;
+
+static void set_adapters(const retro_ext_adapter_choice* choices, unsigned count)
+{
+    char text[128] = {};
+    size_t used = 0;
+    for (unsigned p = 0; p < count && used < sizeof(text); p++)
+    {
+        int written = 0;
+        if (choices[p].first_port == RETRO_EXT_PORT_UNUSED)
+        {
+            written = std::snprintf(text + used, sizeof(text) - used, " %u=taken", p + 1);
+        }
+        else
+        {
+            written = std::snprintf(text + used, sizeof(text) - used, " %u=%u@%u", p + 1, choices[p].adapter,
+                                    choices[p].first_port);
+        }
+        used += written > 0 ? static_cast<size_t>(written) : 0;
+    }
+    core_log(RETRO_LOG_INFO, "adapters:%s\n", text);
+}
+
+static void offer_port_adapters(void)
+{
+    const char* wanted = std::getenv("TEST_CORE_PORT_ADAPTERS");
+    if (wanted == nullptr || std::strcmp(wanted, "1") != 0)
+    {
+        return;
+    }
+    static const retro_controller_description port1_types[] = {
+        { "Test Joypad", RETRO_DEVICE_JOYPAD },
+        { "Test Six Button Pad", TEST_CORE_DEVICE_SIX_BUTTON },
+    };
+    static const retro_controller_description pad_only[] = {
+        { "Test Joypad", RETRO_DEVICE_JOYPAD },
+    };
+    static const retro_ext_adapter port1_adapters[] = {
+        { TEST_TAP, "Test Tap", 4, 0, pad_only, 1 },
+        { TEST_FOUR_SCORE, "Test Four Score", 4, RETRO_EXT_ADAPTER_TAKES_NEXT_PORT, pad_only, 1 },
+    };
+    static const retro_ext_adapter port2_adapters[] = {
+        { TEST_TAP, "Test Tap", 4, 0, pad_only, 1 },
+    };
+    static const retro_ext_physical_port ports[] = {
+        { "Port 1", port1_types, 2, port1_adapters, 2 },
+        { "Port 2", pad_only, 1, port2_adapters, 1 },
+    };
+    retro_ext_port_adapters description = { ports, 2, set_adapters };
+    g_port_adapters = g_environment(RETRO_ENVIRONMENT_EXT_SET_PORT_ADAPTERS, &description);
+    core_log(RETRO_LOG_INFO, "port adapters: %s\n", g_port_adapters ? "driven by the frontend" : "not taken");
+}
+
 static bool g_run_ahead_driven = false;   // the frontend drives our "internal run-ahead" (libretro_extensions.h)
 #if !defined(TEST_CORE_OMIT_RUN)
 static unsigned g_run_ahead_last = 0xFFFFFFFFu;   // what retro_run last logged
@@ -209,6 +269,7 @@ void retro_init(void)
     unsigned most = 3;
     g_run_ahead_driven = g_environment(RETRO_ENVIRONMENT_EXT_SET_RUN_AHEAD, &most);
     core_log(RETRO_LOG_INFO, "run-ahead offered: %s\n", g_run_ahead_driven ? "the frontend drives it" : "not taken");
+    offer_port_adapters();
 
     const char* system_directory = nullptr;
     g_environment(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &system_directory);
@@ -281,6 +342,11 @@ bool retro_load_game(const retro_game_info* game)
 {
     g_port0_device = RETRO_DEVICE_JOYPAD;
     send_input_descriptors();
+    if (g_port_adapters)
+    {
+        unsigned suggested[2] = { 0, TEST_TAP };   // "this game wants a tap on port 2"
+        g_environment(RETRO_ENVIRONMENT_EXT_SUGGEST_PORT_ADAPTERS, suggested);
+    }
     if (game == nullptr)
     {
         core_log(RETRO_LOG_INFO, "started without content\n");

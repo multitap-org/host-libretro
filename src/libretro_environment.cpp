@@ -545,6 +545,13 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             {
                 return null_data(note, note_size);
             }
+            if (host->port_layout.offered)
+            {
+                // The port adapters describe the ports (for this frontend); this
+                // list is for frontends without the extension.
+                std::snprintf(note, note_size, "not used: the core's port adapters describe its ports");
+                return EnvironmentResult::handled;
+            }
             uint32_t described = libretro_input_store_controllers(&host->input_info,
                                                                   static_cast<const retro_controller_info*>(data));
             uint32_t types = 0;
@@ -553,7 +560,7 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
                 types += host->input_info.ports[p].count;
             }
             std::snprintf(note, note_size, "%u port(s), %u device type(s)%s", described, types,
-                          described > LIBRETRO_MAX_PORTS ? ", ports past 4 dropped" : "");
+                          described > LIBRETRO_MAX_PORTS ? ", ports past the host's maximum dropped" : "");
             return EnvironmentResult::handled;
         }
 
@@ -683,6 +690,56 @@ static EnvironmentResult handle_command(LibretroHost* host, uint32_t command, vo
             return EnvironmentResult::handled;
         }
 
+        case RETRO_ENVIRONMENT_EXT_SET_PORT_ADAPTERS:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            char error[128] = {};
+            if (!libretro_ports_store(&host->port_layout, static_cast<const retro_ext_port_adapters*>(data), error,
+                                      sizeof(error)))
+            {
+                std::snprintf(note, note_size, "unusable: %s", error);
+                return EnvironmentResult::rejected;
+            }
+            uint32_t adapters = 0;
+            for (uint32_t p = 0; p < host->port_layout.port_count; p++)
+            {
+                adapters += host->port_layout.ports[p].adapter_count;
+            }
+            std::snprintf(note, note_size, "%u physical port(s), %u adapter(s): driven by the frontend",
+                          host->port_layout.port_count, adapters);
+            return EnvironmentResult::handled;
+        }
+
+        case RETRO_ENVIRONMENT_EXT_SUGGEST_PORT_ADAPTERS:
+        {
+            if (data == nullptr)
+            {
+                return null_data(note, note_size);
+            }
+            if (!host->port_layout.offered)
+            {
+                std::snprintf(note, note_size, "no port adapters described first");
+                return EnvironmentResult::rejected;
+            }
+            const unsigned* wanted = static_cast<const unsigned*>(data);
+            char* cursor = note;
+            size_t left = note_size;
+            for (uint32_t p = 0; p < host->port_layout.port_count; p++)
+            {
+                host->port_layout.suggested[p] = wanted[p];
+                int written = std::snprintf(cursor, left, "%sport %u: %u", p > 0 ? ", " : "", p + 1, wanted[p]);
+                if (written > 0 && static_cast<size_t>(written) < left)
+                {
+                    cursor += written;
+                    left -= static_cast<size_t>(written);
+                }
+            }
+            return EnvironmentResult::handled;
+        }
+
         case RETRO_ENVIRONMENT_EXT_SET_TEXT_INPUT:
         {
             if (data == nullptr)
@@ -714,6 +771,14 @@ static const char* command_name(uint32_t command)
     if (command == RETRO_ENVIRONMENT_EXT_SET_TEXT_INPUT)
     {
         return "EXT_SET_TEXT_INPUT";
+    }
+    if (command == RETRO_ENVIRONMENT_EXT_SET_PORT_ADAPTERS)
+    {
+        return "EXT_SET_PORT_ADAPTERS";
+    }
+    if (command == RETRO_ENVIRONMENT_EXT_SUGGEST_PORT_ADAPTERS)
+    {
+        return "EXT_SUGGEST_PORT_ADAPTERS";
     }
     return libretro_environment_command_name(command);
 }
