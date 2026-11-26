@@ -17,7 +17,6 @@ add_library(host_libretro STATIC
     src/libretro_options.cpp
     src/libretro_input.cpp
     src/libretro_subsystem.cpp
-    src/libretro_rollback.cpp
 )
 
 target_include_directories(host_libretro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -92,15 +91,6 @@ if(MULTITAP_BUILD_TESTS)
              COMMAND host_libretro_state_memory_test $<TARGET_FILE:test_core>)
     set_tests_properties(host_libretro_state_memory PROPERTIES
         PASS_REGULAR_EXPRESSION "state memory: all checks passed"
-        FAIL_REGULAR_EXPRESSION "FAIL|${TEST_CORE_ERRORS}")
-    # Rollback netplay's engine: late inputs replayed, the end state exact.
-    add_executable(host_libretro_rollback_test tests/rollback_test.cpp)
-    target_link_libraries(host_libretro_rollback_test PRIVATE host_libretro)
-    multitap_set_project_flags(host_libretro_rollback_test)
-    add_test(NAME host_libretro_rollback
-             COMMAND host_libretro_rollback_test $<TARGET_FILE:test_core>)
-    set_tests_properties(host_libretro_rollback PROPERTIES
-        PASS_REGULAR_EXPRESSION "rollback: all checks passed"
         FAIL_REGULAR_EXPRESSION "FAIL|${TEST_CORE_ERRORS}")
     # Multitap's text input extension: the test core asks for the keyboard,
     # then for a name; the answer (or the cancel) reaches its done callback.
