@@ -287,8 +287,7 @@ struct LibretroHost
 
     // The core's subsystems (libretro_subsystem.h), from SET_SUBSYSTEM_INFO.
     LibretroSubsystems subsystems;
-    unsigned          port_devices[LIBRETRO_MAX_PORTS] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
-                                                          RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
+    unsigned          port_devices[LIBRETRO_MAX_PORTS] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD,
                                                           RETRO_DEVICE_JOYPAD, RETRO_DEVICE_JOYPAD};
 
     // Rumble the core asked for (GET_RUMBLE_INTERFACE), per port: strong and
@@ -325,11 +324,6 @@ struct LibretroHost
     // libretro_host_text_input_answer().
     LibretroTextInput  text_input = {};
 
-    // Multitap's port adapters extension (libretro_input.h): the core's
-    // physical ports and adapters, the frontend's choice per port
-    // (libretro_host_set_port_adapter) and the players that gives.
-    LibretroPortLayout port_layout = {};
-
     // Environment statistics (for logging and the debug UI later).
     // Indexed by the command number without the EXPERIMENTAL/PRIVATE bits.
     uint32_t environment_call_counts[256] = {};
@@ -358,16 +352,6 @@ void libretro_host_set_input(LibretroHost* host, const LibretroInputState* input
 // the game loads. The core may send new input descriptors in reply. False
 // for a port past LIBRETRO_MAX_PORTS.
 bool libretro_host_set_port_device(LibretroHost* host, unsigned port, unsigned device);
-
-// The adapter on a physical port (port adapters extension): 0 = none, the
-// default; LIBRETRO_ADAPTER_AUTO = the one the core suggests for the game; or
-// an adapter's id. Kept, and applied now if a game is loaded, else right after
-// it loads: the core gets every physical port's choice, then
-// retro_set_controller_port_device for every player (a device a player's port
-// doesn't take becomes the first one it does). host->input_info then lists
-// the players' ports. False if the core offered no adapters or there's no
-// such physical port.
-bool libretro_host_set_port_adapter(LibretroHost* host, uint32_t physical, unsigned adapter);
 
 // Tells the core whether the frontend is fast-forwarding (GET_FASTFORWARDING).
 // The frontend runs the extra frames itself; this is only what the core is told

@@ -507,68 +507,6 @@ static void set_port_device(LibretroHost* host, unsigned port)
     host_log(LogLevel::info, "Port %u: device %u (%s)", port, device, name != nullptr ? name : "not listed by the core");
 }
 
-// Port adapters: resolve the players, tell the core, then rebuild the port
-// list frontends read (one entry per player) and plug every player's device.
-static void apply_port_adapters(LibretroHost* host)
-{
-    LibretroPortLayout* layout = &host->port_layout;
-    libretro_ports_resolve(layout);
-
-    retro_ext_adapter_choice choices[LIBRETRO_PHYSICAL_PORTS_MAX] = {};
-    for (uint32_t p = 0; p < layout->port_count; p++)
-    {
-        choices[p].adapter = layout->applied[p];
-        choices[p].first_port = layout->first_port[p];
-        const LibretroAdapter* adapter = libretro_ports_adapter(layout, p, layout->applied[p]);
-        if (layout->first_port[p] == RETRO_EXT_PORT_UNUSED)
-        {
-            host_log(LogLevel::info, "Physical port %u (%s): taken by the adapter before it", p + 1,
-                     layout->ports[p].description);
-        }
-        else if (adapter != nullptr)
-        {
-            host_log(LogLevel::info, "Physical port %u (%s): %s, players %u-%u", p + 1, layout->ports[p].description,
-                     adapter->description, layout->first_port[p] + 1, layout->first_port[p] + adapter->sub_ports);
-        }
-        else
-        {
-            host_log(LogLevel::info, "Physical port %u (%s): no adapter, player %u", p + 1, layout->ports[p].description,
-                     layout->first_port[p] + 1);
-        }
-    }
-    host_enter(host);
-    layout->set_adapters(choices, layout->port_count);
-    host_leave(host);
-    layout->serial++;
-
-    for (uint32_t player = 0; player < LIBRETRO_MAX_PORTS; player++)
-    {
-        host->input_info.ports[player] = LibretroPortControllers{};
-        const LibretroPortControllers* types = libretro_ports_player_types(layout, player);
-        if (types != nullptr)
-        {
-            host->input_info.ports[player] = *types;
-        }
-    }
-    host->input_info.port_count = layout->player_count;
-    host->input_info.controller_serial++;
-
-    for (uint32_t player = 0; player < layout->player_count; player++)
-    {
-        const LibretroPortControllers* types = &host->input_info.ports[player];
-        bool listed = types->count == 0 && host->port_devices[player] == RETRO_DEVICE_JOYPAD;
-        for (uint32_t t = 0; t < types->count; t++)
-        {
-            listed = listed || types->types[t].id == host->port_devices[player];
-        }
-        if (!listed)
-        {
-            host->port_devices[player] = types->count > 0 ? types->types[0].id : RETRO_DEVICE_JOYPAD;
-        }
-        set_port_device(host, player);
-    }
-}
-
 // After the game loads: the ports the core described, and any other the
 // frontend plugged something other than the joypad into.
 static void apply_port_devices(LibretroHost* host)
@@ -781,7 +719,6 @@ bool libretro_host_load_core(LibretroHost* host, const char* core_path, const Li
     host->hidden = false;
     host->savestate_context = RETRO_SAVESTATE_CONTEXT_NORMAL;
     host->text_input = LibretroTextInput{};
-    host->port_layout = LibretroPortLayout{};   // a core describes its ports again at init
     // Also before set_environment: that's where cores declare their options.
     if (!libretro_options_set_saved(&host->options, config->saved_options, config->saved_option_count))
     {
@@ -954,14 +891,7 @@ static void game_loaded(LibretroHost* host)
     host_leave(host);
 
     load_memory_regions(host);
-    if (host->port_layout.offered)
-    {
-        apply_port_adapters(host);
-    }
-    else
-    {
-        apply_port_devices(host);
-    }
+    apply_port_devices(host);
 
     const retro_game_geometry* geometry = &host->av_info.geometry;
     host_log(LogLevel::info, "Video: base %ux%u, max %ux%u, aspect %.4f, %.4f fps",
@@ -1199,11 +1129,6 @@ void libretro_host_unload_game(LibretroHost* host)
     host->text_input.mode = RETRO_EXT_TEXT_INPUT_OFF;
     host->text_input.done = nullptr;
     host->text_input.serial++;
-    // The next game suggests its own adapters.
-    for (uint32_t p = 0; p < LIBRETRO_PHYSICAL_PORTS_MAX; p++)
-    {
-        host->port_layout.suggested[p] = 0;
-    }
 
     libretro_video_free(&host->video);
     libretro_audio_free(&host->audio);
@@ -1233,21 +1158,6 @@ bool libretro_host_set_port_device(LibretroHost* host, unsigned port, unsigned d
     if (host->game_loaded)
     {
         set_port_device(host, port);
-    }
-    return true;
-}
-
-bool libretro_host_set_port_adapter(LibretroHost* host, uint32_t physical, unsigned adapter)
-{
-    if (!host->port_layout.offered || physical >= host->port_layout.port_count)
-    {
-        host_log(LogLevel::warning, "Physical port %u: no adapters offered there", physical + 1);
-        return false;
-    }
-    host->port_layout.wanted[physical] = adapter;
-    if (host->game_loaded)
-    {
-        apply_port_adapters(host);
     }
     return true;
 }

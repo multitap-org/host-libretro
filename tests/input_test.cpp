@@ -51,22 +51,18 @@ static void test_store_controllers()
         { one_type, 1 },
         { one_type, 1 },
         { one_type, 1 },
-        { one_type, 1 },
-        { one_type, 1 },
-        { one_type, 1 },
-        { one_type, 1 },
-        { pad_types, 2 },   // a ninth port: counted, not kept
+        { pad_types, 2 },   // a fifth port: counted, not kept
         { nullptr, 0 },
     };
     uint32_t described = libretro_input_store_controllers(info, controllers);
-    check(described == 9, "controllers: all nine ports counted");
-    check(info->port_count == LIBRETRO_MAX_PORTS, "controllers: eight ports kept");
+    check(described == 5, "controllers: all five ports counted");
+    check(info->port_count == LIBRETRO_MAX_PORTS, "controllers: four ports kept");
     check(info->ports[0].count == 2 && info->ports[0].types[1].id == RETRO_DEVICE_MOUSE, "controllers: port 0 types");
     check(text_is(info->ports[0].types[1].description, "Mouse"), "controllers: description copied");
     check(text_is(info->ports[1].types[0].description, ""), "controllers: no description = empty");
     check(text_is(libretro_input_controller_name(info, 0, RETRO_DEVICE_MOUSE), "Mouse"), "controllers: name by id");
     check(libretro_input_controller_name(info, 1, RETRO_DEVICE_MOUSE) == nullptr, "controllers: not listed on that port");
-    check(libretro_input_controller_name(info, LIBRETRO_MAX_PORTS, RETRO_DEVICE_JOYPAD) == nullptr, "controllers: port past the maximum");
+    check(libretro_input_controller_name(info, 4, RETRO_DEVICE_JOYPAD) == nullptr, "controllers: port past the maximum");
     check(info->controller_serial == 1, "controllers: serial counts calls");
 
     // A second call replaces everything.

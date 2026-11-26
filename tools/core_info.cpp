@@ -27,7 +27,6 @@ static void print_usage()
                  "usage: libretro_core_info [--verbose] [--frames N] [--system DIR] [--save DIR]\n"
                  "                          [--options-version N] [--sample-rate HZ] [--data-dir DIR] [--load-state N] [--save-state N]\n"
                  "                          [--set KEY=VALUE]... [--saved KEY=VALUE]... [--device PORT=ID]...\n"
-                 "                          [--adapter PHYSICAL=ID|auto]...\n"
                  "                          [--dump-frame FILE] <core> [content]\n"
                  "       libretro_core_info [options] --subsystem IDENT <core> <content|none>...\n"
                  "  --verbose            also log repeated environment calls and core debug output\n"
@@ -169,9 +168,6 @@ int main(int argc, char** argv)
     unsigned device_ports[MAX_DEVICE_SETS] = {};
     unsigned device_ids[MAX_DEVICE_SETS] = {};
     int device_set_count = 0;
-    unsigned adapter_ports[MAX_DEVICE_SETS] = {};   // --adapter PHYSICAL=ID|auto (physical ports from 1)
-    unsigned adapter_ids[MAX_DEVICE_SETS] = {};
-    int adapter_set_count = 0;
     const char* dump_frame_path = nullptr;
     bool peek_only = false;
     long load_state_slot = -1;   // -1 = don't
@@ -272,31 +268,6 @@ int main(int argc, char** argv)
         {
             i++;
             dump_frame_path = argv[i];
-        }
-        else if (std::strcmp(argument, "--adapter") == 0 && i + 1 < argc && adapter_set_count < MAX_DEVICE_SETS)
-        {
-            i++;
-            char* end = nullptr;
-            unsigned long physical = std::strtoul(argv[i], &end, 10);
-            if (end == argv[i] || *end != '=' || physical < 1)
-            {
-                print_usage();
-                return 2;
-            }
-            const char* id_text = end + 1;
-            unsigned long id = LIBRETRO_ADAPTER_AUTO;
-            if (std::strcmp(id_text, "auto") != 0)
-            {
-                id = std::strtoul(id_text, &end, 10);
-                if (end == id_text || *end != '\0')
-                {
-                    print_usage();
-                    return 2;
-                }
-            }
-            adapter_ports[adapter_set_count] = static_cast<unsigned>(physical - 1);
-            adapter_ids[adapter_set_count] = static_cast<unsigned>(id);
-            adapter_set_count++;
         }
         else if (std::strcmp(argument, "--device") == 0 && i + 1 < argc && device_set_count < MAX_DEVICE_SETS)
         {
@@ -414,15 +385,7 @@ int main(int argc, char** argv)
     }
     else if (content_path != nullptr || host->supports_no_game)
     {
-        // --adapter: picked before the game, like a frontend's saved choice.
-        for (int i = 0; exit_code == 0 && i < adapter_set_count; i++)
-        {
-            if (!libretro_host_set_port_adapter(host, adapter_ports[i], adapter_ids[i]))
-            {
-                exit_code = 2;
-            }
-        }
-        if (exit_code == 0 && !libretro_host_load_game(host, content_path))
+        if (!libretro_host_load_game(host, content_path))
         {
             exit_code = 1;
         }
