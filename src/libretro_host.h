@@ -381,8 +381,8 @@ bool libretro_host_state_path(const LibretroHost* host, uint32_t slot, char* out
 // --- Savestates in memory (rollback, the frontend's own run-ahead) ---------
 // The size the core needs now (0: no game, or no savestates).
 size_t libretro_host_state_size(LibretroHost* host);
-// The game's state into `state` (resized to fit: it only grows). False if
-// the core can't.
+// The game's state into `state`, resized to the size written (its memory only
+// grows): use state->size(), not a size asked before. False if the core can't.
 bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state);
 bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t size);
 // A savestate the frontend kept in memory loaded as the player's own load

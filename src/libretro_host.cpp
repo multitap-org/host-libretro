@@ -1184,10 +1184,10 @@ bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state)
     {
         return false;
     }
-    if (state->size() < size)
-    {
-        state->resize(size);   // grows to the core's size once, then stays
-    }
+    // Exactly the core's size, so state->size() is what was written (callers
+    // write and load that many bytes). A smaller size keeps the memory: only
+    // growing allocates, once.
+    state->resize(size);
     host_enter(host);
     bool ok = host->core.retro_serialize(state->data(), size);
     host_leave(host);
