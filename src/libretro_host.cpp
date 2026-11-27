@@ -1184,10 +1184,10 @@ bool libretro_host_serialize(LibretroHost* host, std::vector<uint8_t>* state)
     {
         return false;
     }
-    if (state->size() < size)
-    {
-        state->resize(size);   // grows to the core's size once, then stays
-    }
+    // Exactly the core's size, so state->size() is what was written (callers
+    // write and load that many bytes). A smaller size keeps the memory: only
+    // growing allocates, once.
+    state->resize(size);
     host_enter(host);
     bool ok = host->core.retro_serialize(state->data(), size);
     host_leave(host);
@@ -1217,6 +1217,18 @@ bool libretro_host_unserialize(LibretroHost* host, const uint8_t* state, size_t 
     bool ok = host->core.retro_unserialize(state, size);
     host_leave(host);
     return ok;
+}
+
+bool libretro_host_load_state_memory(LibretroHost* host, const uint8_t* state, size_t size)
+{
+    if (!libretro_host_unserialize(host, state, size))
+    {
+        host_log(LogLevel::error, "Savestate: the core refused a state in memory (%zu bytes)", size);
+        return false;
+    }
+    host_log(LogLevel::info, "Savestate: loaded a state from memory (%zu bytes)", size);
+    tell_event(host, LibretroHostEvent::state_loaded, nullptr, 0);
+    return true;
 }
 
 void libretro_host_set_hidden(LibretroHost* host, bool hidden)
